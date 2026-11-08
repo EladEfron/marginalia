@@ -1,0 +1,1699 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Marginalia</title>
+<meta name="description" content="Handwritten study notes for iPad with Apple Pencil, PDF annotation and lecture recording.">
+<meta name="theme-color" content="#0E6B73">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Marginalia">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+<script src="libs/pdf.min.js"></script>
+<script src="libs/pdf.worker.min.js"></script>
+<script src="libs/jspdf.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+img{max-width:100%}
+/* Layout: full-screen app. Library = subject rail + notebook shelf. Editor = slim header, tool strip, canvas of stacked pages. */
+:root{
+  --bg:#E9ECEF;          /* workspace behind pages */
+  --surface:#FFFFFF;
+  --surface-2:#F4F6F8;
+  --fg:#18202A;
+  --muted:#5C6773;
+  --line:#D5DAE0;
+  --accent:#0E6B73;      /* fountain-pen teal ink */
+  --accent-fg:#FFFFFF;
+  --accent-soft:#D6ECEC;
+  --mark:#F2B705;        /* highlighter amber */
+  --danger:#B3261E;
+  --rec:#D93025;
+  --shadow:rgba(16,24,32,.12);
+  --f-display:"Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --f-body:"Atkinson Hyperlegible", -apple-system, "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14181D;--surface:#1E242B;--surface-2:#252C34;--fg:#E7ECF1;--muted:#9AA6B2;--line:#343D47;
+  --accent:#4FB7BF;--accent-fg:#06282B;--accent-soft:#1B3B3E;--mark:#F2C230;--danger:#F2867E;--rec:#FF6B5E;--shadow:rgba(0,0,0,.45);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14181D;--surface:#1E242B;--surface-2:#252C34;--fg:#E7ECF1;--muted:#9AA6B2;--line:#343D47;
+  --accent:#4FB7BF;--accent-fg:#06282B;--accent-soft:#1B3B3E;--mark:#F2C230;--danger:#F2867E;--rec:#FF6B5E;--shadow:rgba(0,0,0,.45);color-scheme:dark}
+html,body{height:100%;position:fixed;inset:0;width:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;overflow:hidden;overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input,select,textarea{font:inherit;color:var(--fg)}
+svg{display:block}
+.app{height:100%;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);background:var(--surface)}
+.install{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--accent-soft);font-size:14px;line-height:1.4}
+.install b{font-weight:700}
+.install button{margin-left:auto}
+.view{flex:1;min-height:0;display:flex;flex-direction:column}
+
+/* ---------- Library ---------- */
+.lib-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-block:14px 10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{font-family:var(--f-display);font-weight:700;font-size:26px;letter-spacing:-.02em;display:flex;align-items:baseline;gap:8px}
+.brand i{font-style:normal;color:var(--accent)}
+.sync{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;letter-spacing:.02em}
+.sync::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.sync.ok::before{background:#2E9E5B}.sync.warn::before{background:var(--mark)}
+.lib-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.search{flex:1 1 220px;max-width:360px;min-width:0;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);padding:0 12px}
+.btn{height:38px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);display:inline-flex;align-items:center;gap:8px;font-weight:700;white-space:nowrap}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn.danger{color:var(--danger)}
+.btn svg{width:18px;height:18px}
+.lib-body{flex:1;min-height:0;display:flex}
+.rail{width:220px;flex:none;border-right:1px solid var(--line);padding:16px 10px;overflow:auto;background:var(--surface)}
+.rail h3{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:6px 10px 8px}
+.rail button{display:flex;width:100%;justify-content:space-between;padding:9px 10px;border-radius:8px;text-align:left;gap:8px}
+.rail button span:last-child{color:var(--muted);font-variant-numeric:tabular-nums}
+.rail button.on{background:var(--accent-soft);color:var(--fg);font-weight:700}
+.shelf{flex:1;min-width:0;overflow:auto;padding-block:20px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.shelf h2{font-family:var(--f-display);font-size:20px;margin:0 0 14px;font-weight:700;text-wrap:balance}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:22px 18px}
+.card{display:flex;flex-direction:column;gap:8px;text-align:left;position:relative}
+.cover{aspect-ratio:3/4;max-width:100%;border-radius:4px 10px 10px 4px;position:relative;overflow:hidden;box-shadow:0 1px 2px var(--shadow),0 6px 18px var(--shadow);padding:14px 12px 12px 22px;display:flex;flex-direction:column;justify-content:space-between;color:#fff}
+.cover::before{content:"";position:absolute;left:0;top:0;bottom:0;width:12px;background:rgba(0,0,0,.18);box-shadow:inset -1px 0 0 rgba(255,255,255,.15)}
+.cover .lbl{background:rgba(255,255,255,.92);color:#18202A;border-radius:4px;padding:8px 9px;font-family:var(--f-display);font-weight:700;font-size:15px;line-height:1.15;word-break:break-word}
+.cover .lbl small{display:block;font-family:var(--f-body);font-weight:400;font-size:11px;color:#5C6773;letter-spacing:.06em;text-transform:uppercase;margin-top:4px}
+.cover .meta{font-size:11px;opacity:.9;letter-spacing:.04em;font-variant-numeric:tabular-nums}
+.card .t{font-weight:700;font-size:14px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card .s{font-size:12px;color:var(--muted)}
+.card-menu{position:absolute;bottom:52px;right:8px;width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.85);color:#18202A;display:grid;place-items:center}
+.empty{color:var(--muted);padding:30px 0;max-width:46ch;line-height:1.5}
+.hits{display:flex;flex-direction:column;gap:8px;margin-bottom:24px}
+.hit{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;text-align:left;line-height:1.4}
+.hit b{color:var(--accent)}
+.hit mark{background:var(--mark);color:#18202A;border-radius:2px}
+
+/* ---------- Editor ---------- */
+.ed-head{display:flex;align-items:center;gap:6px;padding-block:8px;padding-left:max(10px,env(safe-area-inset-left,0px));padding-right:max(10px,env(safe-area-inset-right,0px));background:var(--surface);border-bottom:1px solid var(--line);min-height:52px}
+.ed-title{flex:1;min-width:0;display:flex;flex-direction:column;padding:0 6px}
+.ed-title b{font-family:var(--f-display);font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ed-title span{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ib{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;flex:none;position:relative}
+.ib svg{width:22px;height:22px}
+.ib:hover{background:var(--surface-2)}
+.ib.on{background:var(--accent-soft);color:var(--accent)}
+.ib:disabled{opacity:.35;cursor:default}
+.rec-btn{height:40px;padding:0 12px;border-radius:20px;display:flex;align-items:center;gap:7px;font-weight:700;font-variant-numeric:tabular-nums;border:1px solid var(--line)}
+.rec-btn .dot{width:12px;height:12px;border-radius:50%;background:var(--rec)}
+.rec-btn.live{background:var(--rec);color:#fff;border-color:var(--rec)}
+.rec-btn.live .dot{background:#fff;animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.tools{display:flex;align-items:center;gap:4px;padding:6px max(10px,env(safe-area-inset-right,0px)) 6px max(10px,env(safe-area-inset-left,0px));background:var(--surface);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.tools::-webkit-scrollbar{display:none}
+.sep{width:1px;height:26px;background:var(--line);margin:0 6px;flex:none}
+.sw{width:30px;height:30px;border-radius:50%;flex:none;display:grid;place-items:center;position:relative}
+.sw i{width:22px;height:22px;border-radius:50%;display:block;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+.sw.on{box-shadow:0 0 0 2px var(--accent)}
+.sw input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+.wd{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;flex:none}
+.wd i{display:block;border-radius:4px;background:currentColor;width:20px}
+.wd.on{background:var(--accent-soft);color:var(--accent)}
+.chip{height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--line);font-size:13px;white-space:nowrap;flex:none;font-weight:700}
+.chip.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.stage{flex:1;min-height:0;position:relative;overflow:hidden;background:var(--bg)}
+#cv{position:absolute;inset:0;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.txt-edit{position:absolute;border:1.5px dashed var(--accent);background:rgba(255,255,255,.0);resize:none;outline:none;padding:0;margin:0;line-height:1.35;overflow:hidden;transform-origin:0 0;color:#18202A;z-index:5}
+.selbar{position:absolute;z-index:6;display:flex;gap:2px;background:var(--fg);color:var(--bg);border-radius:12px;padding:4px;box-shadow:0 6px 20px var(--shadow);flex-wrap:wrap;max-width:calc(100% - 24px)}
+.selbar button{height:34px;padding:0 10px;border-radius:8px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+.selbar button:hover{background:rgba(127,127,127,.25)}
+.selbar .c{width:34px;padding:0;justify-content:center}
+.selbar .c i{width:18px;height:18px;border-radius:50%;display:block;box-shadow:0 0 0 1.5px rgba(255,255,255,.6)}
+.pagechip{position:absolute;right:max(14px,env(safe-area-inset-right,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted);box-shadow:0 2px 8px var(--shadow);pointer-events:none}
+.zoomchip{position:absolute;left:max(14px,env(safe-area-inset-left,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:6px 12px;font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted);box-shadow:0 2px 8px var(--shadow)}
+
+/* side panel (pages / recordings) */
+.panel{position:absolute;top:0;bottom:0;right:0;width:min(320px,88%);background:var(--surface);border-left:1px solid var(--line);z-index:8;display:flex;flex-direction:column;box-shadow:-8px 0 30px var(--shadow)}
+.panel-h{display:flex;align-items:center;gap:8px;padding:12px 12px 10px 16px;border-bottom:1px solid var(--line)}
+.panel-h b{font-family:var(--f-display);font-size:17px;flex:1}
+.panel-b{flex:1;overflow:auto;padding:12px 14px calc(20px + env(safe-area-inset-bottom,0px))}
+.thumbs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.thumb{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.thumb canvas{width:100%;height:auto;border-radius:3px;box-shadow:0 1px 4px var(--shadow);background:#fff;display:block}
+.thumb.cur canvas{box-shadow:0 0 0 2.5px var(--accent)}
+.thumb .row{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.thumb .row button{width:26px;height:26px;border-radius:6px;display:grid;place-items:center}
+.thumb .row button svg{width:16px;height:16px}
+.thumb .row .star.on{color:var(--mark)}
+.sess{border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.sess b{font-size:14px}
+.sess .s{font-size:12px;color:var(--muted)}
+.sess .acts{display:flex;gap:6px;flex-wrap:wrap}
+.sess .acts .btn{height:32px;font-size:13px;padding:0 10px}
+.note{font-size:13px;color:var(--muted);line-height:1.5}
+
+/* player */
+.player{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(52px + env(safe-area-inset-bottom,0px));z-index:7;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 30px var(--shadow);padding:8px 10px;display:flex;align-items:center;gap:6px;width:min(620px,calc(100% - 24px));flex-wrap:wrap}
+.player input[type=range]{flex:1;min-width:120px;accent-color:var(--accent)}
+.player .tm{font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted);min-width:84px;text-align:center}
+.player .hint{flex-basis:100%;font-size:12px;color:var(--muted);padding:0 6px 2px}
+
+/* dialogs */
+.scrim{position:fixed;inset:0;background:rgba(10,14,18,.45);z-index:20;display:grid;place-items:center;padding:16px}
+.dlg{background:var(--surface);border-radius:16px;width:min(460px,100%);max-height:calc(100% - 20px);overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.35);padding:20px;display:flex;flex-direction:column;gap:14px}
+.dlg h3{font-family:var(--f-display);font-size:20px;margin:0;text-wrap:balance}
+.dlg p{margin:0;line-height:1.5;color:var(--muted)}
+.dlg label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.dlg input[type=text],.dlg select{height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);padding:0 12px;font-size:15px;text-transform:none;letter-spacing:0;font-weight:400}
+.dlg .row{display:flex;gap:8px;flex-wrap:wrap}
+.dlg .end{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.covers{display:flex;gap:8px;flex-wrap:wrap}
+.covers button{width:34px;height:34px;border-radius:8px}
+.covers button.on{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--fg)}
+.tpls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tpls button{border:1px solid var(--line);border-radius:10px;padding:6px;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;text-transform:none;letter-spacing:0;color:var(--fg);font-weight:400}
+.tpls button canvas{width:100%;height:auto;border-radius:3px;background:#fff;box-shadow:0 0 0 1px var(--line)}
+.tpls button.on{border-color:var(--accent);box-shadow:0 0 0 1.5px var(--accent)}
+.menu{position:fixed;z-index:21;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px var(--shadow);padding:6px;min-width:230px;max-height:80vh;overflow:auto}
+.menu button{display:flex;width:100%;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;text-align:left}
+.menu button:hover{background:var(--surface-2)}
+.menu button svg{width:18px;height:18px;color:var(--muted)}
+.menu .mh{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:8px 12px 4px}
+.menu hr{border:0;border-top:1px solid var(--line);margin:4px 6px}
+.menu .tog{margin-left:auto;width:34px;height:20px;border-radius:10px;background:var(--line);position:relative;flex:none}
+.menu .tog::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.menu .tog.on{background:var(--accent)}.menu .tog.on::after{left:16px}
+.toast{position:fixed;left:50%;top:calc(70px + env(safe-area-inset-top,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:12px;z-index:30;font-size:14px;max-width:calc(100% - 32px);box-shadow:0 8px 24px var(--shadow);text-align:center}
+.busy{position:fixed;inset:0;z-index:40;background:rgba(10,14,18,.4);display:grid;place-items:center;color:#fff;font-weight:700}
+.busy div{background:var(--fg);color:var(--bg);padding:16px 22px;border-radius:14px}
+
+@media (max-width:700px){
+  .rail{display:none}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:18px 14px}
+  .hide-sm{display:none!important}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="install" id="install" hidden><span>To install: tap <b>Share</b> <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:-3px"><path d="M12 3v12M7 8l5-5 5 5M5 13v7h14v-7"/></svg> in Safari, then <b>Add to Home Screen</b>. Marginalia then opens full screen from its own icon and works offline.</span><button class="btn" id="installX">Got it</button></div>
+  <section class="view" id="library"></section>
+  <section class="view" id="editor" hidden>
+    <header class="ed-head">
+      <button class="ib" id="back" aria-label="Back to library"></button>
+      <div class="ed-title"><b id="nbTitle">Notebook</b><span id="nbSub"></span></div>
+      <button class="ib" id="undo" aria-label="Undo"></button>
+      <button class="ib" id="redo" aria-label="Redo"></button>
+      <button class="rec-btn" id="rec" aria-label="Record lecture"><span class="dot"></span><span id="recLbl">Record</span></button>
+      <button class="ib" id="sessBtn" aria-label="Recordings"></button>
+      <button class="ib" id="pagesBtn" aria-label="Pages"></button>
+      <button class="ib" id="moreBtn" aria-label="More options"></button>
+    </header>
+    <div class="tools" id="tools"></div>
+    <div class="stage" id="stage">
+      <canvas id="cv"></canvas>
+      <div class="zoomchip" id="zoomChip" role="button" tabindex="0">100%</div>
+      <div class="pagechip" id="pageChip">1 / 1</div>
+    </div>
+  </section>
+</div>
+<input type="file" id="fileImg" accept="image/*" hidden>
+<input type="file" id="filePdf" accept="application/pdf,.pdf" hidden>
+<input type="file" id="fileBackup" accept="application/json,.json" hidden>
+<input type="file" id="fileAudio" accept="audio/*,video/mp4,.m4a,.mp3,.wav,.aac" hidden>
+
+<script>
+"use strict";
+/* ================= Icons ================= */
+const I = {
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  undo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>',
+  redo:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 000 12h3"/></svg>',
+  pages:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="3" width="7" height="9" rx="1"/><rect x="13" y="3" width="7" height="9" rx="1"/><rect x="4" y="14" width="7" height="7" rx="1"/><rect x="13" y="14" width="7" height="7" rx="1"/></svg>',
+  more:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
+  wave:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>',
+  pen:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M14.5 4.5l5 5L9 20H4v-5z"/><path d="M12.5 6.5l5 5"/></svg>',
+  hl:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M9 15l-3 3v2h4l3-3"/><path d="M9 15l7.5-10.5 4 4L13 17z"/><path d="M4 21h16" stroke-width="2.5" opacity=".5"/></svg>',
+  eraser:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M8 20l-4-4 10-10 6 6-8 8z"/><path d="M9 10l6 6"/><path d="M8 20h12"/></svg>',
+  lasso:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3 2.6"><ellipse cx="12" cy="10" rx="8" ry="6"/><path d="M8 15c-1 2 0 4 2 5" stroke-dasharray="none"/></svg>',
+  text:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></svg>',
+  image:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>',
+  shape:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="9" r="5"/><rect x="11" y="11" width="9" height="9" rx="1"/></svg>',
+  hand:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V6a1.5 1.5 0 013 0v5M11 11V4.5a1.5 1.5 0 013 0V11M14 11V6a1.5 1.5 0 013 0v7c0 4-2.5 7-6 7-2.5 0-4-1-5.5-3L3 13.5a1.5 1.5 0 012.3-1.9L8 14"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  pdf:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/><path d="M9 14h6M9 17h4"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+  up:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14l6-6 6 6"/></svg>',
+  down:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10l6 6 6-6"/></svg>',
+  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></svg>',
+  star:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>',
+  starO:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></svg>',
+  close:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  play:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg>',
+  pause:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>',
+  back15:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12a8 8 0 108-8H8"/><path d="M10 1L7 4l3 3"/><text x="12" y="16" font-size="7.5" text-anchor="middle" fill="currentColor" stroke="none" font-family="system-ui" font-weight="700">15</text></svg>',
+  fwd15:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 12a8 8 0 11-8-8h4"/><path d="M14 1l3 3-3 3"/><text x="12" y="16" font-size="7.5" text-anchor="middle" fill="currentColor" stroke="none" font-family="system-ui" font-weight="700">15</text></svg>',
+  download:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
+  edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+  paper:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
+  pencil:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M5 19l1-5L16 4l4 4-10 10z"/><path d="M5 19l3-1"/></svg>',
+};
+
+/* ================= Constants ================= */
+const PW = 794, PH = 1123, GAP = 30;
+const COVERS = ['#0E6B73','#7A2E3B','#22385E','#B7841A','#5D7A55','#5B3E73','#3E4A57','#C4573A'];
+const INK = ['#18202A','#1F4FB5','#C62E2E','#1E7B4A','#6B3FA0','#E07A10'];
+const HLC = ['#FFE14D','#9BE58A','#FF9EC4','#8FD3FF','#FFB870'];
+const TEMPLATES = [['blank','Blank'],['ruled','Ruled'],['narrow','Narrow ruled'],['grid','Grid'],['dots','Dotted'],['cornell','Cornell']];
+const PAPERS = {white:{bg:'#FFFFFF',ln:'#C9D3DE',mg:'#E8A0A0',dark:false}, cream:{bg:'#FBF6E8',ln:'#D8CDB2',mg:'#E3A49A',dark:false}, slate:{bg:'#23292F',ln:'#3C4651',mg:'#7A4A4A',dark:true}};
+
+/* ================= Utils ================= */
+const $ = (s, r=document) => r.querySelector(s);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtT = ms => { ms = Math.max(0, ms|0); const s = Math.floor(ms/1000); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60; return (h? h+':'+String(m).padStart(2,'0') : m) + ':' + String(x).padStart(2,'0'); };
+const fmtDate = t => { const d = new Date(t), now = new Date(); if (d.toDateString() === now.toDateString()) return 'Today ' + d.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}); return d.toLocaleDateString([], {month:'short', day:'numeric', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric'}); };
+let toastTimer;
+function toast(msg, ms=2600){ let t = $('.toast'); if (!t){ t = document.createElement('div'); t.className='toast'; t.setAttribute('role','status'); document.body.appendChild(t); } t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(()=> t.hidden = true, ms); }
+function busy(msg){ let b = $('.busy'); if (msg == null){ if (b) b.remove(); return; } if (!b){ b = document.createElement('div'); b.className='busy'; b.innerHTML='<div></div>'; document.body.appendChild(b);} b.firstChild.textContent = msg; }
+function h(html){ const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; }
+
+/* ================= Local storage (IndexedDB) ================= */
+const IDB = (() => {
+  let dbp = null;
+  function open(){
+    if (dbp) return dbp;
+    dbp = new Promise((res) => {
+      try {
+        const r = indexedDB.open('marginalia', 1);
+        r.onupgradeneeded = () => { const d = r.result; d.createObjectStore('nb'); d.createObjectStore('pg'); d.createObjectStore('blob'); };
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => res(null);
+        r.onblocked = () => res(null);
+      } catch(e){ res(null); }
+    });
+    return dbp;
+  }
+  async function op(store, mode, fn){
+    const d = await open(); if (!d) return undefined;
+    return new Promise((res) => { try { const tx = d.transaction(store, mode); const st = tx.objectStore(store); const r = fn(st); tx.oncomplete = () => res(r && r.result); tx.onerror = () => res(undefined); tx.onabort = () => res(undefined); } catch(e){ res(undefined); } });
+  }
+  return {
+    ok: async () => !!(await open()),
+    get: (s,k) => op(s,'readonly', st => st.get(k)),
+    put: (s,k,v) => op(s,'readwrite', st => st.put(v,k)),
+    del: (s,k) => op(s,'readwrite', st => st.delete(k)),
+    all: (s) => op(s,'readonly', st => st.getAll()),
+  };
+})();
+
+/* ================= State ================= */
+const S = {
+  notebooks: new Map(),  // id -> meta
+  nb: null,              // open notebook meta
+  items: new Map(),      // pageId -> items[] for open notebook
+  tool: 'pen',
+  pen: {color: INK[0], w: 2.2, style: 'fountain'},
+  hl: {color: HLC[0], w: 18},
+  eraser: {mode: 'stroke', size: 16},
+  text: {size: 18},
+  shapes: true,
+  pencilOnly: false,
+  subject: '__all',
+  query: '',
+};
+const prefs = (() => { try { return JSON.parse(localStorage.getItem('marginalia.prefs') || '{}'); } catch(e){ return {}; } })();
+function savePrefs(){ try { localStorage.setItem('marginalia.prefs', JSON.stringify({pen:S.pen, hl:S.hl, eraser:S.eraser, text:S.text, shapes:S.shapes, pencilOnly:S.pencilOnly})); } catch(e){} }
+Object.assign(S, Object.fromEntries(Object.entries(prefs).filter(([k]) => ['pen','hl','eraser','text','shapes','pencilOnly'].includes(k))));
+
+function newNotebook({title, subject='', color=COVERS[0], template='ruled', paper='white', id}){
+  const now = Date.now();
+  return {id: id || uid(), title: title || 'Untitled notebook', subject, color, template, paper, pages: [], sessions: [], pdfs: {}, rev: {}, pushed: {}, createdAt: now, updatedAt: now, lastPage: 0};
+}
+function newPage(nb, opts={}){ return {id: uid(), template: opts.template || nb.template, paper: opts.paper || nb.paper, h: opts.h || PH, bg: opts.bg || null, star: false}; }
+const metaForSave = nb => JSON.parse(JSON.stringify(nb));
+
+/* ---------- saving ---------- */
+const dirty = new Set(); let saveT = null;
+function touchPage(pid){
+  const nb = S.nb; if (!nb) return;
+  nb.rev[pid] = (nb.rev[pid] || 0) + 1; nb.updatedAt = Date.now(); delete nb.seed;
+  dirty.add(pid); pageVer.set(pid, (pageVer.get(pid)||0) + 1);
+  clearTimeout(saveT); saveT = setTimeout(flushSave, 500);
+}
+function touchMeta(){ if (!S.nb) return; S.nb.updatedAt = Date.now(); delete S.nb.seed; clearTimeout(saveT); saveT = setTimeout(flushSave, 400); }
+async function flushSave(){
+  clearTimeout(saveT); const nb = S.nb; if (!nb) return;
+  const ids = [...dirty]; dirty.clear();
+  for (const pid of ids){ const it = S.items.get(pid); if (it) await IDB.put('pg', pid, {id: pid, nb: nb.id, items: it}); }
+  await IDB.put('nb', nb.id, metaForSave(nb));
+  Cloud.schedule(nb.id);
+}
+
+/* ================= Library view ================= */
+function subjectsList(){
+  const m = new Map();
+  for (const nb of S.notebooks.values()){ if (nb.deleted) continue; const k = nb.subject || ''; m.set(k, (m.get(k)||0) + 1); }
+  return [...m.entries()].sort((a,b) => a[0].localeCompare(b[0]));
+}
+async function renderLibrary(){
+  const el = $('#library');
+  const live = [...S.notebooks.values()].filter(n => !n.deleted);
+  const subs = subjectsList();
+  if (S.subject !== '__all' && S.subject !== '__star' && !subs.some(s => s[0] === S.subject)) S.subject = '__all';
+  let list = live;
+  if (S.subject === '__star') list = live.filter(n => n.pages.some(p => p.star));
+  else if (S.subject !== '__all') list = live.filter(n => (n.subject||'') === S.subject);
+  const q = S.query.trim().toLowerCase();
+  if (q) list = list.filter(n => (n.title + ' ' + (n.subject||'')).toLowerCase().includes(q));
+  list.sort((a,b) => b.updatedAt - a.updatedAt);
+  const heading = S.subject === '__all' ? 'All notebooks' : S.subject === '__star' ? 'Notebooks with bookmarked pages' : (S.subject || 'No subject');
+  el.innerHTML = `
+  <header class="lib-head">
+    <div class="brand">Marginalia<i>.</i></div>
+    <span class="sync" id="syncLbl"></span>
+    <input class="search" id="q" type="search" placeholder="Search titles and typed notes" value="${esc(S.query)}" aria-label="Search">
+    <div class="lib-actions">
+      <button class="btn" id="bkBtn" aria-label="Backup and restore">${I.download}<span class="hide-sm">Backup</span></button>
+      <button class="btn" id="impPdf">${I.pdf}<span>Import PDF</span></button>
+      <button class="btn primary" id="newNb">${I.plus}<span>New notebook</span></button>
+    </div>
+  </header>
+  <div class="lib-body">
+    <nav class="rail" aria-label="Subjects">
+      <h3>Library</h3>
+      <button data-s="__all" class="${S.subject==='__all'?'on':''}"><span>All notebooks</span><span>${live.length}</span></button>
+      <button data-s="__star" class="${S.subject==='__star'?'on':''}"><span>Bookmarked</span><span>${live.filter(n=>n.pages.some(p=>p.star)).length}</span></button>
+      <h3 style="margin-top:18px">Subjects</h3>
+      ${subs.map(([s,c]) => `<button data-s="${esc(s)}" class="${S.subject===s?'on':''}"><span>${esc(s || 'No subject')}</span><span>${c}</span></button>`).join('')}
+    </nav>
+    <main class="shelf">
+      <div id="hits"></div>
+      <h2>${esc(heading)}</h2>
+      ${list.length ? `<div class="grid">${list.map(cardHTML).join('')}</div>` : `<p class="empty">${q ? 'No notebook titles match. Typed notes that match appear above.' : 'No notebooks here yet. Tap New notebook to start one, or import lecture slides as a PDF to write on them.'}</p>`}
+    </main>
+  </div>`;
+  Cloud.paintStatus();
+  $('#newNb').onclick = () => notebookDialog();
+  $('#bkBtn').onclick = e => showMenu(e.currentTarget, [
+    {icon: I.download, label: 'Back up all notebooks', fn: backupAll},
+    {icon: I.up, label: 'Restore from a backup file', fn: () => $('#fileBackup').click()},
+  ]);
+  $('#impPdf').onclick = () => { pdfTarget = 'new'; $('#filePdf').click(); };
+  const qi = $('#q');
+  qi.oninput = () => { S.query = qi.value; clearTimeout(qi._t); qi._t = setTimeout(() => { const pos = qi.selectionStart; renderLibrary().then(() => { const n = $('#q'); n.focus(); try{ n.setSelectionRange(pos,pos);}catch(e){} }); }, 250); };
+  el.querySelectorAll('.rail button').forEach(b => b.onclick = () => { S.subject = b.dataset.s; renderLibrary(); });
+  el.querySelectorAll('.card').forEach(c => {
+    c.querySelector('.open').onclick = () => openNotebook(c.dataset.id);
+    c.querySelector('.card-menu').onclick = (e) => { e.stopPropagation(); cardMenu(c.dataset.id, e.currentTarget); };
+  });
+  if (q) searchText(q);
+}
+function cardHTML(nb){
+  const pages = nb.pages.length, rec = nb.sessions.length;
+  return `<div class="card" data-id="${nb.id}">
+    <button class="open" style="text-align:left;display:flex;flex-direction:column;gap:8px" aria-label="Open ${esc(nb.title)}">
+      <div class="cover" style="background:${nb.color}">
+        <div class="lbl">${esc(nb.title)}${nb.subject ? `<small>${esc(nb.subject)}</small>` : ''}</div>
+        <div class="meta">${pages} page${pages===1?'':'s'}${rec ? ` · ${rec} rec` : ''}</div>
+      </div>
+      <div><div class="t">${esc(nb.title)}</div><div class="s">Edited ${fmtDate(nb.updatedAt)}</div></div>
+    </button>
+    <button class="card-menu" aria-label="Notebook options">${I.more}</button>
+  </div>`;
+}
+async function searchText(q){
+  const all = await IDB.all('pg') || [];
+  const hits = [];
+  for (const rec of all){
+    const nb = S.notebooks.get(rec.nb); if (!nb || nb.deleted) continue;
+    const pi = nb.pages.findIndex(p => p.id === rec.id); if (pi < 0) continue;
+    for (const it of rec.items || []){
+      if (it.k !== 't') continue; const i = it.text.toLowerCase().indexOf(q); if (i < 0) continue;
+      const a = Math.max(0, i - 40), snip = it.text.slice(a, i + q.length + 60);
+      hits.push({nb, pi, html: (a?'…':'') + esc(snip).replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'ig'), m => `<mark>${m}</mark>`)});
+      break;
+    }
+    if (hits.length > 20) break;
+  }
+  const box = $('#hits'); if (!box) return;
+  box.innerHTML = hits.length ? `<h2>In your typed notes</h2><div class="hits">${hits.map((x,i) => `<button class="hit" data-i="${i}"><b>${esc(x.nb.title)}</b> · page ${x.pi+1}<br>${x.html}</button>`).join('')}</div>` : '';
+  box.querySelectorAll('.hit').forEach(b => b.onclick = () => { const x = hits[+b.dataset.i]; openNotebook(x.nb.id, x.pi); });
+}
+function cardMenu(id, anchor){
+  const nb = S.notebooks.get(id);
+  showMenu(anchor, [
+    {icon:I.edit, label:'Rename or change cover', fn: () => notebookDialog(nb)},
+    {icon:I.copy, label:'Duplicate', fn: () => duplicateNotebook(nb)},
+    {icon:I.download, label:'Export as PDF', fn: async () => { await exportPDF(nb); }},
+    '-',
+    {icon:I.trash, label:'Delete notebook', danger:true, fn: () => confirmDlg(`Delete “${nb.title}”?`, 'This removes the notebook, its pages and recordings from this device and from your synced copy. It can’t be undone.', 'Delete', () => deleteNotebook(nb))},
+  ]);
+}
+async function duplicateNotebook(nb){
+  const copy = JSON.parse(JSON.stringify(nb)); copy.id = uid(); copy.title = nb.title + ' copy'; copy.createdAt = copy.updatedAt = Date.now(); copy.rev = {}; copy.pushed = {}; copy.sessions = [];
+  for (const p of copy.pages){ const old = p.id; p.id = uid(); const rec = await IDB.get('pg', old); const items = (rec ? rec.items : []).filter(it => true).map(it => { const c = {...it}; delete c.s; delete c.t; return c; }); await IDB.put('pg', p.id, {id:p.id, nb:copy.id, items}); copy.rev[p.id] = 1; }
+  S.notebooks.set(copy.id, copy); await IDB.put('nb', copy.id, copy); Cloud.schedule(copy.id); renderLibrary(); toast('Notebook duplicated');
+}
+async function deleteNotebook(nb){
+  nb.deleted = true; nb.updatedAt = Date.now();
+  await IDB.put('nb', nb.id, metaForSave(nb));
+  for (const p of nb.pages) IDB.del('pg', p.id);
+  for (const k of Object.keys(nb.pdfs||{})) IDB.del('blob', k);
+  for (const s of nb.sessions) if (s.audioKey) IDB.del('blob', s.audioKey);
+  Cloud.schedule(nb.id); renderLibrary(); toast('Notebook deleted');
+}
+
+/* ---------- menus & dialogs ---------- */
+function closeMenus(){ document.querySelectorAll('.menu,.menu-scrim').forEach(m => m.remove()); }
+function showMenu(anchor, items){
+  closeMenus();
+  const scrim = h('<div class="menu-scrim" style="position:fixed;inset:0;z-index:20"></div>');
+  scrim.onpointerdown = (e) => { e.preventDefault(); closeMenus(); };
+  const m = h('<div class="menu" role="menu"></div>');
+  for (const it of items){
+    if (it === '-'){ m.appendChild(h('<hr>')); continue; }
+    if (it.head){ m.appendChild(h(`<div class="mh">${esc(it.head)}</div>`)); continue; }
+    const b = h(`<button role="menuitem">${it.icon||''}<span>${esc(it.label)}</span>${it.toggle !== undefined ? `<span class="tog ${it.toggle?'on':''}"></span>` : ''}</button>`);
+    if (it.danger) b.style.color = 'var(--danger)';
+    b.onclick = () => { closeMenus(); it.fn(); };
+    m.appendChild(b);
+  }
+  document.body.append(scrim, m);
+  const r = anchor.getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
+  m.style.left = clamp(r.right - mw, 8, innerWidth - mw - 8) + 'px';
+  m.style.top = (r.bottom + 6 + mh > innerHeight - 8 ? Math.max(8, r.top - mh - 6) : r.bottom + 6) + 'px';
+}
+function dialog(html, onMount){
+  const scrim = h(`<div class="scrim"><div class="dlg" role="dialog" aria-modal="true">${html}</div></div>`);
+  const close = () => scrim.remove();
+  scrim.addEventListener('pointerdown', e => { if (e.target === scrim) close(); });
+  document.body.appendChild(scrim);
+  onMount && onMount(scrim.firstChild, close);
+  return close;
+}
+function confirmDlg(title, body, okLabel, fn){
+  dialog(`<h3>${esc(title)}</h3><p>${esc(body)}</p><div class="end"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok style="background:var(--danger);border-color:var(--danger);color:#fff">${esc(okLabel)}</button></div>`, (d, close) => {
+    d.querySelector('[data-x]').onclick = close; d.querySelector('[data-ok]').onclick = () => { close(); fn(); };
+  });
+}
+function tplPreview(tpl, paper='white', w=120){
+  const c = document.createElement('canvas'); const sc = w / PW; c.width = w * 2; c.height = Math.round(PH * sc) * 2;
+  const x = c.getContext('2d'); x.scale(sc*2, sc*2); drawTemplate(x, {template:tpl, paper, h:PH}); return c;
+}
+function notebookDialog(nb){
+  const editing = !!nb;
+  const st = {color: nb ? nb.color : COVERS[(S.notebooks.size) % COVERS.length], template: nb ? nb.template : 'ruled', paper: nb ? nb.paper : 'white'};
+  const subs = subjectsList().map(s => s[0]).filter(Boolean);
+  dialog(`<h3>${editing ? 'Notebook details' : 'New notebook'}</h3>
+    <label>Title<input type="text" id="dTitle" value="${esc(nb ? nb.title : '')}" placeholder="e.g. Week 3 — Thermodynamics"></label>
+    <label>Subject<input type="text" id="dSub" list="subList" value="${esc(nb ? nb.subject : (S.subject.startsWith('__') ? '' : S.subject))}" placeholder="e.g. PHYS 1201"><datalist id="subList">${subs.map(s=>`<option value="${esc(s)}">`).join('')}</datalist></label>
+    <label>Cover<div class="covers">${COVERS.map(c => `<button data-c="${c}" style="background:${c}" aria-label="Cover colour ${c}" class="${c===st.color?'on':''}"></button>`).join('')}</div></label>
+    ${editing ? '' : `<label>Paper for new pages<div class="tpls" id="dTpl"></div></label>
+    <label>Paper colour<select id="dPaper"><option value="white">White</option><option value="cream">Cream</option><option value="slate">Slate (dark)</option></select></label>`}
+    <div class="end"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok>${editing ? 'Save' : 'Create'}</button></div>`, (d, close) => {
+    d.querySelectorAll('.covers button').forEach(b => b.onclick = () => { st.color = b.dataset.c; d.querySelectorAll('.covers button').forEach(x => x.classList.toggle('on', x === b)); });
+    if (!editing){
+      const tp = d.querySelector('#dTpl');
+      const paint = () => { tp.innerHTML=''; for (const [k,l] of TEMPLATES){ const b = h(`<button class="${k===st.template?'on':''}"></button>`); b.appendChild(tplPreview(k, st.paper, 90)); b.appendChild(document.createTextNode(l)); b.onclick = () => { st.template = k; paint(); }; tp.appendChild(b);} };
+      paint();
+      const ps = d.querySelector('#dPaper'); ps.value = st.paper; ps.onchange = () => { st.paper = ps.value; paint(); };
+    }
+    d.querySelector('[data-x]').onclick = close;
+    setTimeout(() => d.querySelector('#dTitle').focus(), 50);
+    d.querySelector('[data-ok]').onclick = async () => {
+      const title = d.querySelector('#dTitle').value.trim() || 'Untitled notebook', subject = d.querySelector('#dSub').value.trim();
+      close();
+      if (editing){ Object.assign(nb, {title, subject, color: st.color}); nb.updatedAt = Date.now(); await IDB.put('nb', nb.id, metaForSave(nb)); Cloud.schedule(nb.id); if (S.nb === nb) paintHeader(); else renderLibrary(); return; }
+      const n = newNotebook({title, subject, color: st.color, template: st.template, paper: st.paper});
+      const p = newPage(n); n.pages.push(p); n.rev[p.id] = 1;
+      S.notebooks.set(n.id, n);
+      await IDB.put('pg', p.id, {id:p.id, nb:n.id, items:[]}); await IDB.put('nb', n.id, n);
+      Cloud.schedule(n.id); openNotebook(n.id);
+    };
+  });
+}
+
+/* ================= Editor: camera, layout, rendering ================= */
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let VW = 0, VH = 0, DPR = 1;
+const cam = {s: 1, tx: 0, ty: 0};
+let layoutY = new Map(), totalH = 0;
+const pageVer = new Map();
+const caches = new Map(); // pid -> {c, level, ver, fade}
+const CAP = 2.6, MAXC = 6;
+let gesturing = false;
+let colors = {};
+function readColors(){ const cs = getComputedStyle(document.documentElement); colors = {bg: cs.getPropertyValue('--bg').trim(), accent: cs.getPropertyValue('--accent').trim(), shadow: cs.getPropertyValue('--shadow').trim()}; }
+
+function computeLayout(){ layoutY = new Map(); let y = 0; for (const p of S.nb.pages){ layoutY.set(p.id, y); y += p.h + GAP; } totalH = Math.max(0, y - GAP); }
+function resize(){
+  const r = $('#stage').getBoundingClientRect(); DPR = Math.min(window.devicePixelRatio || 1, 3);
+  VW = r.width; VH = r.height; cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR);
+  cv.style.width = VW + 'px'; cv.style.height = VH + 'px';
+  clampCam(); requestRender();
+}
+function clampCam(){
+  const cw = PW * cam.s;
+  if (cw <= VW - 20) cam.tx = (VW - cw) / 2; else cam.tx = clamp(cam.tx, VW - cw - 30, 30);
+  const lo = Math.min(30, VH * 0.55 - totalH * cam.s);
+  cam.ty = clamp(cam.ty, lo, 30);
+}
+function fitWidth(){ cam.s = clamp(Math.min(1.25, (VW - 32) / PW), 0.3, 6); }
+const toWorld = (x, y) => ({x: (x - cam.tx) / cam.s, y: (y - cam.ty) / cam.s});
+function pageAt(wy, nearest=false){
+  let best = null, bd = Infinity;
+  for (const p of S.nb.pages){ const y = layoutY.get(p.id); if (wy >= y && wy <= y + p.h) return p; const d = Math.min(Math.abs(wy - y), Math.abs(wy - y - p.h)); if (d < bd){ bd = d; best = p; } }
+  return nearest ? best : null;
+}
+function currentPageIndex(){
+  const cy = toWorld(0, VH * 0.4).y; const p = pageAt(cy, true); return p ? S.nb.pages.indexOf(p) : 0;
+}
+let rq = false;
+function requestRender(){ if (!rq){ rq = true; requestAnimationFrame(() => { rq = false; render(); }); } }
+
+/* ---------- templates ---------- */
+function drawTemplate(x, page){
+  const P = PAPERS[page.paper] || PAPERS.white, H = page.h || PH;
+  x.fillStyle = P.bg; x.fillRect(0, 0, PW, H);
+  if (page.bg) return;
+  x.lineWidth = 1; x.strokeStyle = P.ln; x.fillStyle = P.ln;
+  const t = page.template;
+  if (t === 'ruled' || t === 'narrow' || t === 'cornell'){
+    const step = t === 'narrow' ? 26 : 32, top = t === 'cornell' ? 120 : 110;
+    x.beginPath(); for (let y = top; y < H - 30; y += step){ x.moveTo(0, y + .5); x.lineTo(PW, y + .5); } x.stroke();
+    if (t !== 'cornell'){ x.strokeStyle = P.mg; x.beginPath(); x.moveTo(84.5, 0); x.lineTo(84.5, H); x.stroke(); }
+    else { x.strokeStyle = P.mg; x.lineWidth = 1.5; x.beginPath(); x.moveTo(0, 96); x.lineTo(PW, 96); x.moveTo(230, 96); x.lineTo(230, H - 220); x.moveTo(0, H - 220); x.lineTo(PW, H - 220); x.stroke();
+      x.fillStyle = P.mg; x.font = '700 11px ' + getComputedStyle(document.body).fontFamily; x.globalAlpha = .9; x.fillText('CUES', 16, 114); x.fillText('NOTES', 246, 114); x.fillText('SUMMARY', 16, H - 202); x.globalAlpha = 1; }
+  } else if (t === 'grid'){
+    const st = 19; x.beginPath(); for (let i = st; i < PW; i += st){ x.moveTo(i + .5, 0); x.lineTo(i + .5, H); } for (let j = st; j < H; j += st){ x.moveTo(0, j + .5); x.lineTo(PW, j + .5); } x.globalAlpha = .65; x.stroke(); x.globalAlpha = 1;
+  } else if (t === 'dots'){
+    for (let i = 24; i < PW; i += 24) for (let j = 24; j < H; j += 24){ x.beginPath(); x.arc(i, j, 1.3, 0, 6.283); x.fill(); }
+  }
+}
+
+/* ---------- item drawing ---------- */
+function strokePath(x, p, n){
+  x.beginPath(); x.moveTo(p[0], p[1]);
+  if (n === 2){ x.lineTo(p[3], p[4]); return; }
+  for (let i = 1; i < n - 1; i++){ const mx = (p[i*3] + p[i*3+3]) / 2, my = (p[i*3+1] + p[i*3+4]) / 2; x.quadraticCurveTo(p[i*3], p[i*3+1], mx, my); }
+  x.lineTo(p[(n-1)*3], p[(n-1)*3+1]);
+}
+const pw = (s, pr) => s.u ? s.w : s.w * (0.35 + 1.15 * pr);
+function drawStroke(x, s, paperDark){
+  const p = s.p, n = p.length / 3; if (!n) return;
+  x.lineCap = 'round'; x.lineJoin = 'round';
+  if (s.tool === 'hl'){
+    x.save(); x.globalAlpha *= paperDark ? .45 : .42; x.strokeStyle = s.c; x.lineWidth = s.w; x.lineCap = 'butt';
+    if (!paperDark) x.globalCompositeOperation = 'multiply';
+    if (n === 1){ x.fillStyle = s.c; x.fillRect(p[0] - s.w/4, p[1] - s.w/2, s.w/2, s.w); } else { strokePath(x, p, n); x.stroke(); }
+    x.restore(); return;
+  }
+  x.strokeStyle = s.c; x.fillStyle = s.c;
+  if (n === 1){ x.beginPath(); x.arc(p[0], p[1], pw(s, p[2]) / 2, 0, 6.283); x.fill(); return; }
+  if (s.u){ x.lineWidth = s.w; strokePath(x, p, n); x.stroke(); return; }
+  // variable width, segment by segment
+  let px = p[0], py = p[1];
+  for (let i = 1; i < n; i++){
+    const last = i === n - 1;
+    const ex = last ? p[i*3] : (p[i*3] + p[i*3+3]) / 2, ey = last ? p[i*3+1] : (p[i*3+1] + p[i*3+4]) / 2;
+    x.lineWidth = pw(s, p[i*3+2]);
+    x.beginPath(); x.moveTo(px, py);
+    if (last) x.lineTo(ex, ey); else x.quadraticCurveTo(p[i*3], p[i*3+1], ex, ey);
+    x.stroke(); px = ex; py = ey;
+  }
+}
+const imgCache = new Map();
+function getImg(src){ let im = imgCache.get(src); if (!im){ im = new Image(); im.onload = () => { bumpAll(); requestRender(); }; im.src = src; imgCache.set(src, im); } return im.complete && im.naturalWidth ? im : null; }
+const mctx = document.createElement('canvas').getContext('2d');
+const fontFor = it => `${it.b ? 700 : 400} ${it.size}px "Atkinson Hyperlegible", -apple-system, system-ui, sans-serif`;
+function textLines(it){
+  mctx.font = fontFor(it); const out = [];
+  for (const para of it.text.split('\n')){
+    const words = para.split(/(\s+)/); let line = '';
+    for (const w of words){ const t = line + w; if (mctx.measureText(t).width > it.w && line.trim()){ out.push(line.trimEnd()); line = w.trimStart(); } else line = t; }
+    out.push(line);
+  }
+  return out;
+}
+const textH = it => Math.max(1, textLines(it).length) * it.size * 1.35;
+function drawText(x, it, paperDark){
+  x.font = fontFor(it); x.fillStyle = (paperDark && it.c === INK[0]) ? '#E7ECF1' : it.c; x.textBaseline = 'top';
+  textLines(it).forEach((l, i) => x.fillText(l, it.x, it.y + i * it.size * 1.35 + it.size * 0.12));
+}
+let fade = null; // {sid, t}
+function drawPageContent(x, page, items){
+  drawTemplate(x, page);
+  const P = PAPERS[page.paper] || PAPERS.white;
+  if (page.bg){ const im = pdfImage(page.bg); if (im) x.drawImage(im, 0, 0, PW, page.h); else { x.fillStyle = '#8A949E'; x.font = '14px system-ui'; x.fillText('Loading PDF page…', 30, 40); } }
+  if (!items) return;
+  const alphaFor = it => (fade && it.s === fade.sid && it.t > fade.t) ? 0.14 : 1;
+  for (const it of items) if (it.k === 'i'){ const im = getImg(it.src); x.globalAlpha = alphaFor(it); if (im) x.drawImage(im, it.x, it.y, it.w, it.h); else { x.strokeStyle = '#aaa'; x.strokeRect(it.x, it.y, it.w, it.h); } }
+  for (const it of items) if (it.k === 's' && it.tool === 'hl'){ x.globalAlpha = alphaFor(it); drawStroke(x, it, P.dark); }
+  for (const it of items){ if (it.k === 's' && it.tool !== 'hl'){ x.globalAlpha = alphaFor(it); drawStroke(x, it, P.dark); } else if (it.k === 't'){ x.globalAlpha = alphaFor(it); if (it !== editingText) drawText(x, it, P.dark); } }
+  x.globalAlpha = 1;
+}
+function bumpAll(){ for (const p of (S.nb ? S.nb.pages : [])) pageVer.set(p.id, (pageVer.get(p.id)||0) + 1); }
+function getCache(page){
+  const want = Math.min(CAP, cam.s * DPR);
+  let c = caches.get(page.id); const ver = pageVer.get(page.id) || 0;
+  const level = gesturing && c ? c.level : Math.round(want * 8) / 8;
+  if (c && c.level === level && c.ver === ver) { caches.delete(page.id); caches.set(page.id, c); return c; }
+  if (!c){ c = {c: document.createElement('canvas')}; }
+  c.c.width = Math.ceil(PW * level); c.c.height = Math.ceil(page.h * level);
+  const x = c.c.getContext('2d'); x.setTransform(level, 0, 0, level, 0, 0);
+  drawPageContent(x, page, S.items.get(page.id));
+  c.level = level; c.ver = ver;
+  caches.delete(page.id); caches.set(page.id, c);
+  while (caches.size > MAXC){ const k = caches.keys().next().value; const o = caches.get(k); o.c.width = o.c.height = 0; caches.delete(k); }
+  return c;
+}
+function render(){
+  if (!S.nb) return;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = colors.bg || '#E9ECEF'; ctx.fillRect(0, 0, VW, VH);
+  const direct = cam.s * DPR > CAP + 0.01 && !gesturing;
+  for (const p of S.nb.pages){
+    const y = layoutY.get(p.id), sy = y * cam.s + cam.ty, sh = p.h * cam.s;
+    if (sy > VH || sy + sh < 0) continue;
+    const sx = cam.tx, sw = PW * cam.s;
+    ctx.fillStyle = colors.shadow || 'rgba(0,0,0,.1)'; ctx.fillRect(sx + 1, sy + 3, sw, sh);
+    if (direct){
+      ctx.save(); ctx.beginPath(); ctx.rect(sx, sy, sw, sh); ctx.clip();
+      ctx.translate(sx, sy); ctx.scale(cam.s, cam.s); drawPageContent(ctx, p, S.items.get(p.id)); ctx.restore();
+    } else { const c = getCache(p); ctx.drawImage(c.c, sx, sy, sw, sh); }
+  }
+  // live ink
+  if (live){
+    const y = layoutY.get(live.page.id);
+    ctx.save(); ctx.beginPath(); ctx.rect(cam.tx, y * cam.s + cam.ty, PW * cam.s, live.page.h * cam.s); ctx.clip();
+    ctx.translate(cam.tx, y * cam.s + cam.ty); ctx.scale(cam.s, cam.s); drawStroke(ctx, live.s, (PAPERS[live.page.paper]||PAPERS.white).dark); ctx.restore();
+  }
+  // lasso path
+  if (lasso && lasso.pts.length > 2){
+    ctx.save(); ctx.setLineDash([6, 5]); ctx.strokeStyle = colors.accent; ctx.lineWidth = 1.5; ctx.fillStyle = 'rgba(14,107,115,.06)';
+    ctx.beginPath(); lasso.pts.forEach((q, i) => { const sx = q.x * cam.s + cam.tx, sy = q.y * cam.s + cam.ty; i ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); }); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+  }
+  // selection
+  if (sel){
+    const r = selScreenRect();
+    ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = colors.accent; ctx.lineWidth = 1.5; ctx.strokeRect(r.x, r.y, r.w, r.h); ctx.setLineDash([]);
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(r.x + r.w, r.y + r.h, 9, 0, 6.283); ctx.fill(); ctx.stroke(); ctx.restore();
+  }
+  // eraser cursor
+  if (eraseCursor){ ctx.save(); ctx.strokeStyle = colors.accent; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(eraseCursor.x, eraseCursor.y, S.eraser.size, 0, 6.283); ctx.stroke(); ctx.restore(); }
+  positionSelbar();
+  const pi = currentPageIndex();
+  $('#pageChip').textContent = `${pi + 1} / ${S.nb.pages.length}`;
+  $('#zoomChip').textContent = Math.round(cam.s / Math.min(1.25, (VW - 32) / PW) * 100) + '%';
+  if (editingText) placeTextEditor();
+}
+
+/* ================= Undo ================= */
+let undoStack = [], redoStack = [];
+function pushUndo(entry){ undoStack.push(entry); if (undoStack.length > 120) undoStack.shift(); redoStack = []; paintUndo(); }
+function itemsChange(pid, before){ return {items: [{pid, before, after: S.items.get(pid).slice()}]}; }
+function applyEntry(e, dir){
+  if (e.pages){ S.nb.pages = (dir === 'undo' ? e.pages.before : e.pages.after).map(p => ({...p})); computeLayout(); clampCam(); touchMeta(); }
+  for (const c of e.items || []){ S.items.set(c.pid, (dir === 'undo' ? c.before : c.after).slice()); touchPage(c.pid); }
+  clearSel(); requestRender(); if (pagesOpen) renderPagesPanel();
+}
+function undo(){ const e = undoStack.pop(); if (!e) return; applyEntry(e, 'undo'); redoStack.push(e); paintUndo(); }
+function redo(){ const e = redoStack.pop(); if (!e) return; applyEntry(e, 'redo'); undoStack.push(e); paintUndo(); }
+function paintUndo(){ $('#undo').disabled = !undoStack.length; $('#redo').disabled = !redoStack.length; }
+
+/* ================= Geometry ================= */
+function distSeg(px, py, ax, ay, bx, by){ const dx = bx - ax, dy = by - ay, l = dx*dx + dy*dy; let t = l ? ((px-ax)*dx + (py-ay)*dy) / l : 0; t = clamp(t, 0, 1); const qx = ax + t*dx - px, qy = ay + t*dy - py; return Math.sqrt(qx*qx + qy*qy); }
+function strokeHit(s, x, y, r){
+  const p = s.p, n = p.length / 3, rr = r + (s.tool === 'hl' ? s.w / 2 : s.w);
+  if (n === 1) return Math.hypot(p[0]-x, p[1]-y) <= rr;
+  for (let i = 0; i < n - 1; i++) if (distSeg(x, y, p[i*3], p[i*3+1], p[i*3+3], p[i*3+4]) <= rr) return true;
+  return false;
+}
+function inPoly(x, y, poly){ let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++){ const a = poly[i], b = poly[j]; if ((a.y > y) !== (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x) c = !c; } return c; }
+function itemBox(it){
+  if (it.k === 's'){ let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; const p = it.p; for (let i = 0; i < p.length; i += 3){ x0 = Math.min(x0, p[i]); x1 = Math.max(x1, p[i]); y0 = Math.min(y0, p[i+1]); y1 = Math.max(y1, p[i+1]); } const m = it.w / 2 + 2; return {x0: x0 - m, y0: y0 - m, x1: x1 + m, y1: y1 + m}; }
+  if (it.k === 't') return {x0: it.x, y0: it.y, x1: it.x + it.w, y1: it.y + textH(it)};
+  return {x0: it.x, y0: it.y, x1: it.x + it.w, y1: it.y + it.h};
+}
+function rdp(pts, eps){
+  if (pts.length < 3) return pts.slice();
+  let dmax = 0, idx = 0; const a = pts[0], b = pts[pts.length - 1];
+  for (let i = 1; i < pts.length - 1; i++){ const d = distSeg(pts[i].x, pts[i].y, a.x, a.y, b.x, b.y); if (d > dmax){ dmax = d; idx = i; } }
+  if (dmax > eps){ const l = rdp(pts.slice(0, idx + 1), eps), r = rdp(pts.slice(idx), eps); return l.slice(0, -1).concat(r); }
+  return [a, b];
+}
+function densify(poly, step=5){ const out = []; for (let i = 0; i < poly.length - 1; i++){ const a = poly[i], b = poly[i+1], d = Math.hypot(b.x-a.x, b.y-a.y), n = Math.max(1, Math.ceil(d / step)); for (let k = 0; k < n; k++) out.push(a.x + (b.x-a.x)*k/n, a.y + (b.y-a.y)*k/n, .5); } const l = poly[poly.length-1]; out.push(l.x, l.y, .5); return out; }
+function recognize(flat){
+  const pts = []; for (let i = 0; i < flat.length; i += 3) pts.push({x: flat[i], y: flat[i+1]});
+  if (pts.length < 4) return null;
+  let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+  if (L < 25) return null;
+  const a = pts[0], b = pts[pts.length - 1], d = Math.hypot(b.x - a.x, b.y - a.y);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const q of pts){ x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); }
+  const diag = Math.hypot(x1 - x0, y1 - y0);
+  if (d / L > 0.9){ // straight line, snap near-horizontal/vertical
+    let ex = b.x, ey = b.y; const ang = Math.abs(Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI);
+    if (ang < 6 || ang > 174) ey = a.y; else if (Math.abs(ang - 90) < 6) ex = a.x;
+    return {name:'Line', p: densify([a, {x:ex, y:ey}])};
+  }
+  if (d < Math.max(0.2 * L, 14)){
+    const closed = pts.concat([a]); const simp = rdp(closed, diag * 0.085); const corners = simp.slice(0, -1);
+    if (corners.length === 3) return {name:'Triangle', p: densify([...corners, corners[0]])};
+    if (corners.length === 4){
+      const axis = corners.every((c, i) => { const n = corners[(i+1)%4], an = Math.abs(Math.atan2(n.y - c.y, n.x - c.x) * 180 / Math.PI) % 90; return an < 12 || an > 78; });
+      if (axis) return {name:'Rectangle', p: densify([{x:x0,y:y0},{x:x1,y:y0},{x:x1,y:y1},{x:x0,y:y1},{x:x0,y:y0}])};
+      return {name:'Shape', p: densify([...corners, corners[0]])};
+    }
+    let cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, rx = (x1 - x0) / 2, ry = (y1 - y0) / 2;
+    if (Math.abs(rx - ry) / Math.max(rx, ry) < 0.16){ rx = ry = (rx + ry) / 2; }
+    const poly = []; for (let i = 0; i <= 72; i++){ const t = i / 72 * Math.PI * 2; poly.push({x: cx + rx * Math.cos(t), y: cy + ry * Math.sin(t)}); }
+    return {name: rx === ry ? 'Circle' : 'Ellipse', p: densify(poly, 6)};
+  }
+  const simp = rdp(pts, diag * 0.07);
+  if (simp.length <= 4) return {name:'Lines', p: densify(simp)};
+  return null;
+}
+
+/* ================= Input ================= */
+let live = null;        // {page, s, t0, lastMove, anchor, snapT, snapped}
+let lasso = null;       // {page, pts}
+let sel = null;         // {pid, ids:Set, box, drag}
+let eraseCursor = null, eraseOp = null;
+let editingText = null;
+const pointers = new Map();
+let nav = null;         // pan / pinch state
+let penDown = false, inertiaRAF = 0;
+let lastPenUp = 0;
+
+function screenPt(e){ const r = cv.getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; }
+function localPt(page, w){ return {x: w.x, y: w.y - layoutY.get(page.id)}; }
+
+cv.addEventListener('pointerdown', e => {
+  if (!S.nb) return;
+  if (editingText){ commitText(); return; }
+  const sp = screenPt(e);
+  cancelAnimationFrame(inertiaRAF);
+  if (e.pointerType === 'touch'){
+    if (penDown || (e.width > 45 && e.height > 45)) return; // palm rejection
+    try { cv.setPointerCapture(e.pointerId); } catch(_){}
+    pointers.set(e.pointerId, {x: sp.x, y: sp.y, sx: sp.x, sy: sp.y, t: performance.now()});
+    if (pointers.size >= 2){
+      if (live || lasso || eraseOp){ cancelAction(); }
+      startNav();
+      return;
+    }
+    if (S.pencilOnly || S.tool === 'hand') { startNav(); return; }
+    beginTool(e, sp);
+    return;
+  }
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (e.pointerType === 'pen'){
+    penDown = true;
+    if (!S.pencilOnly){ S.pencilOnly = true; savePrefs(); if (S.tool === 'hand') S.tool = 'pen'; paintTools(); toast('Apple Pencil detected. Pencil writes, fingers scroll and zoom. Change this in ⋯ menu.', 3800); }
+    if (nav){ nav = null; pointers.clear(); gesturing = false; }
+  }
+  try { cv.setPointerCapture(e.pointerId); } catch(_){}
+  if (S.tool === 'hand'){ pointers.set(e.pointerId, {x: sp.x, y: sp.y, sx: sp.x, sy: sp.y, t: performance.now()}); startNav(); return; }
+  beginTool(e, sp);
+});
+cv.addEventListener('pointermove', e => {
+  if (!S.nb) return;
+  const sp = screenPt(e);
+  if (pointers.has(e.pointerId)){
+    const p = pointers.get(e.pointerId); p.x = sp.x; p.y = sp.y;
+    if (nav) moveNav();
+    else if (actionPointer === e.pointerId) moveTool(e, sp);
+    return;
+  }
+  if (actionPointer === e.pointerId) moveTool(e, sp);
+  else if (S.tool === 'eraser' && e.pointerType !== 'touch' && (e.pointerType === 'mouse' || e.pressure === 0)){ eraseCursor = sp; requestRender(); }
+});
+const upHandler = e => {
+  if (!S.nb) return;
+  if (e.pointerType === 'pen'){ penDown = false; lastPenUp = performance.now(); }
+  if (pointers.has(e.pointerId)){
+    const p = pointers.get(e.pointerId);
+    if (nav){ endNavPointer(e.pointerId, e.type === 'pointercancel'); }
+    pointers.delete(e.pointerId);
+    if (actionPointer === e.pointerId) endTool(e, screenPt(e), e.type === 'pointercancel');
+    return;
+  }
+  if (actionPointer === e.pointerId) endTool(e, screenPt(e), e.type === 'pointercancel');
+};
+cv.addEventListener('pointerup', upHandler);
+cv.addEventListener('pointercancel', upHandler);
+cv.addEventListener('pointerleave', () => { if (eraseCursor && actionPointer == null){ eraseCursor = null; requestRender(); } });
+cv.addEventListener('wheel', e => {
+  if (!S.nb) return; e.preventDefault();
+  if (e.ctrlKey || e.metaKey){ const sp = screenPt(e); zoomAt(sp.x, sp.y, Math.exp(-e.deltaY * 0.01)); }
+  else { cam.tx -= e.deltaX; cam.ty -= e.deltaY; clampCam(); }
+  requestRender();
+}, {passive: false});
+// Safari trackpad gesture events (desktop) — prevent page zoom
+['gesturestart','gesturechange'].forEach(t => document.addEventListener(t, e => e.preventDefault(), {passive:false}));
+
+function zoomAt(x, y, f){ const ns = clamp(cam.s * f, 0.25, 6); const k = ns / cam.s; cam.tx = x - (x - cam.tx) * k; cam.ty = y - (y - cam.ty) * k; cam.s = ns; clampCam(); }
+
+/* ---------- navigation (pan / pinch / multi-finger taps) ---------- */
+function startNav(){
+  const pts = [...pointers.values()];
+  nav = {start: performance.now(), maxCount: pts.length, moved: 0, vx: 0, vy: 0, lt: performance.now(), ...navBasis(pts)};
+  gesturing = pts.length > 1;
+}
+function navBasis(pts){
+  const cx = pts.reduce((a,p) => a + p.x, 0) / pts.length, cy = pts.reduce((a,p) => a + p.y, 0) / pts.length;
+  const d = pts.length > 1 ? Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) : 0;
+  return {cx, cy, d, s0: cam.s, tx0: cam.tx, ty0: cam.ty};
+}
+function moveNav(){
+  const pts = [...pointers.values()]; if (!pts.length) return;
+  nav.maxCount = Math.max(nav.maxCount, pts.length);
+  if (pts.length !== nav.n){ Object.assign(nav, navBasis(pts)); nav.n = pts.length; gesturing = pts.length > 1; }
+  const b = navBasis(pts);
+  const now = performance.now(), dt = Math.max(1, now - nav.lt);
+  const ptx = cam.tx, pty = cam.ty;
+  if (pts.length > 1 && nav.d > 0){
+    const ns = clamp(nav.s0 * b.d / nav.d, 0.25, 6), k = ns / nav.s0;
+    cam.s = ns; cam.tx = b.cx - (nav.cx - nav.tx0) * k; cam.ty = b.cy - (nav.cy - nav.ty0) * k;
+  } else { cam.tx = nav.tx0 + b.cx - nav.cx; cam.ty = nav.ty0 + b.cy - nav.cy; }
+  clampCam();
+  nav.vx = (cam.tx - ptx) / dt * 16; nav.vy = (cam.ty - pty) / dt * 16; nav.lt = now;
+  for (const p of pts) nav.moved = Math.max(nav.moved, Math.hypot(p.x - p.sx, p.y - p.sy));
+  requestRender();
+}
+function endNavPointer(id, cancelled){
+  const remaining = pointers.size - 1;
+  if (remaining > 0){ nav.n = 0; return; }
+  const dur = performance.now() - nav.start, tap = !cancelled && nav.moved < 12 && dur < 320;
+  if (tap && nav.maxCount === 2) { undo(); toast('Undo', 900); }
+  else if (tap && nav.maxCount === 3) { redo(); toast('Redo', 900); }
+  else if (tap && nav.maxCount === 1){ const p = pointers.get(id); if (p) fingerTap(p); }
+  else if (!cancelled && nav.maxCount === 1 && (Math.abs(nav.vx) > 1 || Math.abs(nav.vy) > 1)) inertia(nav.vx, nav.vy);
+  nav = null;
+  if (gesturing){ gesturing = false; requestRender(); }
+}
+function inertia(vx, vy){
+  const step = () => { vx *= 0.94; vy *= 0.94; cam.tx += vx; cam.ty += vy; clampCam(); requestRender(); if (Math.abs(vx) + Math.abs(vy) > 0.4) inertiaRAF = requestAnimationFrame(step); };
+  inertiaRAF = requestAnimationFrame(step);
+}
+function fingerTap(p){
+  const w = toWorld(p.x, p.y);
+  if (Player.open && Player.jumpTo(w)) return;
+  if (S.tool === 'text') { const page = pageAt(w.y); if (page) textAt(page, localPt(page, w)); return; }
+  if (sel){ clearSel(); requestRender(); }
+}
+
+/* ---------- tools ---------- */
+let actionPointer = null;
+function cancelAction(){
+  if (live){ live = null; }
+  if (lasso){ lasso = null; }
+  if (eraseOp){ for (const [pid, before] of eraseOp.before) { S.items.set(pid, before); pageVer.set(pid, (pageVer.get(pid)||0)+1); } eraseOp = null; eraseCursor = null; }
+  actionPointer = null; requestRender();
+}
+function beginTool(e, sp){
+  const w = toWorld(sp.x, sp.y);
+  actionPointer = e.pointerId;
+  const tool = S.tool;
+  if (sel && tool === 'lasso'){
+    const r = selScreenRect();
+    if (Math.hypot(sp.x - (r.x + r.w), sp.y - (r.y + r.h)) < 22){ startSelDrag('scale', w); return; }
+    if (sp.x >= r.x && sp.x <= r.x + r.w && sp.y >= r.y && sp.y <= r.y + r.h){ startSelDrag('move', w); return; }
+  }
+  if (sel) clearSel();
+  const page = pageAt(w.y);
+  if (tool === 'pen' || tool === 'hl'){
+    if (!page){ actionPointer = null; return; }
+    const lp = localPt(page, w), pr = e.pointerType === 'pen' ? (e.pressure || .5) : .5;
+    const cfg = tool === 'pen' ? S.pen : S.hl;
+    const s = {id: uid(), k: 's', tool, c: cfg.color, w: cfg.w, p: [lp.x, lp.y, pr]};
+    if (tool === 'hl' || S.pen.style === 'ball' || e.pointerType !== 'pen') s.u = 1;
+    if (Rec.active){ s.s = Rec.active.id; s.t = Math.round(Rec.elapsed()); }
+    live = {page, s, t0: performance.now(), anchor: {x: sp.x, y: sp.y}, snapped: false, pen: e.pointerType === 'pen'};
+    armSnap();
+    requestRender();
+  } else if (tool === 'eraser'){
+    eraseOp = {before: new Map()}; eraseCursor = sp; eraseAt(w);
+  } else if (tool === 'lasso'){
+    if (!page){ actionPointer = null; return; }
+    lasso = {page, pts: [w]};
+  } else if (tool === 'text'){
+    // handled on up to allow tap
+    live = null; textStart = {page, w, sp};
+  }
+}
+let textStart = null;
+function armSnap(){
+  if (!live) return; clearTimeout(live.snapT);
+  if (!S.shapes || live.s.tool !== 'pen' && live.s.tool !== 'hl') return;
+  live.snapT = setTimeout(() => {
+    if (!live || live.snapped) return;
+    const r = recognize(live.s.p); if (!r) return;
+    live.s.p = r.p; live.s.u = 1; live.snapped = true; requestRender(); toast(r.name, 900);
+  }, 600);
+}
+function moveTool(e, sp){
+  const evs = (e.getCoalescedEvents && e.getCoalescedEvents().length) ? e.getCoalescedEvents() : [e];
+  if (live){
+    if (live.snapped) return;
+    const y0 = layoutY.get(live.page.id), r = cv.getBoundingClientRect();
+    for (const ce of evs){
+      const x = (ce.clientX - r.left - cam.tx) / cam.s, y = (ce.clientY - r.top - cam.ty) / cam.s - y0;
+      const p = live.s.p, n = p.length;
+      const lx = p[n-3], ly = p[n-2];
+      if (Math.hypot(x - lx, y - ly) < 0.6 / cam.s) continue;
+      const pr = live.pen ? (ce.pressure || .5) : .5;
+      // light smoothing
+      const k = 0.62; p.push(lx + (x - lx) * k, ly + (y - ly) * k, (p[n-1] * 0.5 + pr * 0.5));
+    }
+    if (Math.hypot(sp.x - live.anchor.x, sp.y - live.anchor.y) > 5){ live.anchor = {x: sp.x, y: sp.y}; armSnap(); }
+    requestRender();
+  } else if (eraseOp){
+    for (const ce of evs){ const r = cv.getBoundingClientRect(); eraseAt(toWorld(ce.clientX - r.left, ce.clientY - r.top)); }
+    eraseCursor = sp; requestRender();
+  } else if (lasso){
+    lasso.pts.push(toWorld(sp.x, sp.y)); requestRender();
+  } else if (sel && sel.drag){
+    dragSel(toWorld(sp.x, sp.y));
+  }
+}
+function endTool(e, sp, cancelled){
+  actionPointer = null;
+  if (cancelled && (live || lasso || eraseOp)){ cancelAction(); return; }
+  if (live){
+    clearTimeout(live.snapT);
+    const s = live.s, page = live.page; live = null;
+    const n = s.p.length / 3, dur = performance.now() - (s._t0 || 0);
+    // tap-to-jump in playback
+    if (Player.open && n <= 4){ if (Player.jumpTo({x: sp.x, y: 0, screen: sp})) { requestRender(); return; } }
+    s.p = s.p.map((v, i) => i % 3 === 2 ? Math.round(v * 100) / 100 : Math.round(v * 10) / 10);
+    const before = S.items.get(page.id).slice();
+    S.items.get(page.id).push(s); touchPage(page.id); pushUndo(itemsChange(page.id, before));
+    requestRender();
+  } else if (eraseOp){
+    const items = [];
+    for (const [pid, before] of eraseOp.before) items.push({pid, before, after: S.items.get(pid).slice()});
+    if (items.length) pushUndo({items});
+    eraseOp = null; eraseCursor = (e.pointerType === 'mouse') ? sp : null; requestRender();
+  } else if (lasso){
+    finishLasso(); lasso = null; requestRender();
+  } else if (sel && sel.drag){
+    endSelDrag();
+  } else if (textStart){
+    const t = textStart; textStart = null;
+    if (t.page && Math.hypot(sp.x - t.sp.x, sp.y - t.sp.y) < 10) textAt(t.page, localPt(t.page, t.w));
+  }
+}
+
+/* ---------- eraser ---------- */
+function eraseAt(w){
+  const page = pageAt(w.y); if (!page) return;
+  const lp = localPt(page, w), r = S.eraser.size / cam.s;
+  const items = S.items.get(page.id); let changed = false; const out = [];
+  for (const it of items){
+    if (it.k !== 's' || !strokeHit(it, lp.x, lp.y, S.eraser.mode === 'stroke' ? r * 0.6 : r * 0.35)){ out.push(it); continue; }
+    if (!eraseOp.before.has(page.id)) eraseOp.before.set(page.id, items.slice());
+    changed = true;
+    if (S.eraser.mode === 'stroke') continue;
+    // partial: densify, cut points inside radius, keep runs
+    const p = it.p, dense = [];
+    for (let i = 0; i < p.length / 3; i++){
+      if (i > 0){ const ax = p[i*3-3], ay = p[i*3-2], bx = p[i*3], by = p[i*3+1], d = Math.hypot(bx-ax, by-ay), steps = Math.floor(d / Math.max(1.5, r / 3)); for (let k = 1; k < steps; k++) dense.push(ax + (bx-ax)*k/steps, ay + (by-ay)*k/steps, p[i*3+2]); }
+      dense.push(p[i*3], p[i*3+1], p[i*3+2]);
+    }
+    let run = [];
+    const flush = () => { if (run.length >= 6) out.push({...it, id: uid(), p: run}); run = []; };
+    for (let i = 0; i < dense.length; i += 3){ if (Math.hypot(dense[i] - lp.x, dense[i+1] - lp.y) <= r + (it.tool === 'hl' ? it.w / 2 : it.w / 2)) flush(); else run.push(dense[i], dense[i+1], dense[i+2]); }
+    flush();
+  }
+  if (changed){ S.items.set(page.id, out); touchPage(page.id); }
+}
+
+/* ---------- lasso & selection ---------- */
+function finishLasso(){
+  const page = lasso.page, y0 = layoutY.get(page.id);
+  if (lasso.pts.length < 4) return;
+  const poly = lasso.pts.map(q => ({x: q.x, y: q.y - y0}));
+  const ids = new Set();
+  for (const it of S.items.get(page.id)){
+    if (it.k === 's'){ let inside = 0, tot = 0; for (let i = 0; i < it.p.length; i += 9){ tot++; if (inPoly(it.p[i], it.p[i+1], poly)) inside++; } if (tot && inside / tot >= 0.5) ids.add(it.id); }
+    else { const b = itemBox(it); if (inPoly((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, poly)) ids.add(it.id); }
+  }
+  if (ids.size){ sel = {pid: page.id, ids}; updateSelBox(); showSelbar(); }
+}
+function selItems(){ return S.items.get(sel.pid).filter(it => sel.ids.has(it.id)); }
+function updateSelBox(){ let b = {x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity}; for (const it of selItems()){ const q = itemBox(it); b = {x0: Math.min(b.x0, q.x0), y0: Math.min(b.y0, q.y0), x1: Math.max(b.x1, q.x1), y1: Math.max(b.y1, q.y1)}; } sel.box = b; }
+function selScreenRect(){ const y0 = layoutY.get(sel.pid) || 0, b = sel.box; return {x: b.x0 * cam.s + cam.tx - 6, y: (b.y0 + y0) * cam.s + cam.ty - 6, w: (b.x1 - b.x0) * cam.s + 12, h: (b.y1 - b.y0) * cam.s + 12}; }
+function clearSel(){ sel = null; const b = $('.selbar'); if (b) b.remove(); }
+function cloneItem(it){ const c = {...it}; if (it.p) c.p = it.p.slice(); return c; }
+function startSelDrag(mode, w){
+  const items = S.items.get(sel.pid), before = items.slice();
+  const base = new Map();
+  const next = items.map(it => { if (!sel.ids.has(it.id)) return it; base.set(it.id, cloneItem(it)); return cloneItem(it); });
+  S.items.set(sel.pid, next);
+  sel.drag = {mode, start: w, before, base, box0: {...sel.box}};
+  const bar = $('.selbar'); if (bar) bar.style.visibility = 'hidden';
+}
+function transformItem(o, t, f, ox, oy, dx, dy){
+  const X = v => ox + (v - ox) * f + dx, Y = v => oy + (v - oy) * f + dy;
+  if (o.k === 's'){ for (let i = 0; i < o.p.length; i += 3){ t.p[i] = X(o.p[i]); t.p[i+1] = Y(o.p[i+1]); } t.w = o.w * f; }
+  else if (o.k === 't'){ t.x = X(o.x); t.y = Y(o.y); t.w = o.w * f; t.size = Math.max(6, o.size * f); }
+  else { t.x = X(o.x); t.y = Y(o.y); t.w = o.w * f; t.h = o.h * f; }
+}
+function dragSel(w){
+  const d = sel.drag, b0 = d.box0; let f = 1, dx = 0, dy = 0;
+  if (d.mode === 'move'){ dx = w.x - d.start.x; dy = w.y - d.start.y; }
+  else { const ow = b0.x1 - b0.x0, oh = b0.y1 - b0.y0; const nw = ow + (w.x - d.start.x), nh = oh + (w.y - d.start.y); f = clamp(Math.max(nw / ow, nh / oh), 0.1, 12); }
+  for (const it of S.items.get(sel.pid)) if (sel.ids.has(it.id)) transformItem(d.base.get(it.id), it, f, b0.x0, b0.y0, dx, dy);
+  pageVer.set(sel.pid, (pageVer.get(sel.pid)||0) + 1); updateSelBox(); requestRender();
+}
+function endSelDrag(){
+  const d = sel.drag; sel.drag = null;
+  for (const it of S.items.get(sel.pid)) if (it.k === 's' && sel.ids.has(it.id)) it.p = it.p.map((v, i) => i % 3 === 2 ? v : Math.round(v * 10) / 10);
+  touchPage(sel.pid); pushUndo(itemsChange(sel.pid, d.before)); showSelbar(); requestRender();
+}
+function showSelbar(){
+  let bar = $('.selbar'); if (bar) bar.remove();
+  bar = h('<div class="selbar" role="toolbar" aria-label="Selection"></div>');
+  const sw = [...INK.slice(0, 4), HLC[0]];
+  for (const c of sw){ const b = h(`<button class="c" aria-label="Recolour"><i style="background:${c}"></i></button>`); b.onclick = () => selRecolor(c); bar.appendChild(b); }
+  const mk = (label, icon, fn) => { const b = h(`<button>${icon}<span>${label}</span></button>`); b.querySelector('svg') && (b.querySelector('svg').style.cssText = 'width:16px;height:16px'); b.onclick = fn; bar.appendChild(b); };
+  mk('Duplicate', I.copy, selDuplicate);
+  mk('Delete', I.trash, selDelete);
+  $('#stage').appendChild(bar); positionSelbar();
+}
+function positionSelbar(){
+  const bar = $('.selbar'); if (!bar || !sel) return;
+  bar.style.visibility = sel.drag ? 'hidden' : 'visible';
+  const r = selScreenRect(), bw = bar.offsetWidth, bh = bar.offsetHeight;
+  let top = r.y - bh - 10; if (top < 8) top = r.y + r.h + 14; if (top + bh > VH - 8) top = Math.max(8, r.y + 8);
+  bar.style.left = clamp(r.x + r.w / 2 - bw / 2, 8, Math.max(8, VW - bw - 8)) + 'px'; bar.style.top = top + 'px';
+}
+function selRecolor(c){
+  const before = S.items.get(sel.pid).slice();
+  S.items.set(sel.pid, before.map(it => sel.ids.has(it.id) && it.k !== 'i' ? {...it, c} : it));
+  touchPage(sel.pid); pushUndo(itemsChange(sel.pid, before)); requestRender();
+}
+function selDelete(){
+  const before = S.items.get(sel.pid).slice();
+  S.items.set(sel.pid, before.filter(it => !sel.ids.has(it.id)));
+  touchPage(sel.pid); pushUndo(itemsChange(sel.pid, before)); clearSel(); requestRender();
+}
+function selDuplicate(){
+  const before = S.items.get(sel.pid).slice(), ids = new Set();
+  const copies = selItems().map(it => { const c = cloneItem(it); c.id = uid(); ids.add(c.id); delete c.s; delete c.t; transformItem(it, c, 1, 0, 0, 24, 24); return c; });
+  S.items.set(sel.pid, before.concat(copies)); sel.ids = ids; updateSelBox();
+  touchPage(sel.pid); pushUndo(itemsChange(sel.pid, before)); showSelbar(); requestRender();
+}
+
+/* ---------- text ---------- */
+let textEl = null, textPage = null, textBefore = null, textOrig = null;
+function textAt(page, lp){
+  const items = S.items.get(page.id);
+  let it = [...items].reverse().find(t => t.k === 't' && lp.x >= t.x - 6 && lp.x <= t.x + t.w + 6 && lp.y >= t.y - 6 && lp.y <= t.y + textH(t) + 6);
+  textBefore = items.slice(); textOrig = it || null;
+  if (it){ const i = items.indexOf(it); it = {...it}; items[i] = it; }
+  else {
+    const sz = S.text.size, w = Math.min(520, PW - lp.x - 30);
+    if (w < 60) return;
+    it = {id: uid(), k: 't', x: Math.round(lp.x), y: Math.round(lp.y - sz * 0.7), w: Math.round(w), size: sz, b: sz >= 26 ? 1 : 0, c: S.pen.color, text: ''};
+    if (Rec.active){ it.s = Rec.active.id; it.t = Math.round(Rec.elapsed()); }
+    items.push(it);
+  }
+  editingText = it; textPage = page; pageVer.set(page.id, (pageVer.get(page.id)||0) + 1);
+  textEl = document.createElement('textarea'); textEl.className = 'txt-edit'; textEl.value = it.text; textEl.setAttribute('aria-label', 'Typed note');
+  textEl.addEventListener('input', () => { editingText.text = textEl.value; placeTextEditor(); });
+  textEl.addEventListener('keydown', ev => { if (ev.key === 'Escape') { textEl.blur(); } });
+  textEl.addEventListener('blur', () => setTimeout(commitText, 0));
+  $('#stage').appendChild(textEl); placeTextEditor(); requestRender();
+  setTimeout(() => { textEl && textEl.focus(); }, 30);
+}
+function placeTextEditor(){
+  if (!textEl || !editingText) return;
+  const it = editingText, y0 = layoutY.get(textPage.id), P = PAPERS[textPage.paper] || PAPERS.white;
+  Object.assign(textEl.style, {left: (it.x * cam.s + cam.tx) + 'px', top: ((it.y + y0) * cam.s + cam.ty) + 'px', width: it.w + 'px', height: (textH(it) + it.size * 0.4) + 'px', font: fontFor(it), transform: `scale(${cam.s})`, color: (P.dark && it.c === INK[0]) ? '#E7ECF1' : it.c, lineHeight: '1.35'});
+}
+function commitText(){
+  if (!editingText) return;
+  const it = editingText, page = textPage, el = textEl; editingText = null; textEl = null; textPage = null;
+  if (el) el.remove();
+  const items = S.items.get(page.id);
+  it.text = it.text.replace(/\s+$/, '');
+  const changed = textOrig ? it.text !== textOrig.text : !!it.text;
+  if (!changed){ S.items.set(page.id, textBefore.slice()); pageVer.set(page.id, (pageVer.get(page.id)||0) + 1); }
+  else { if (!it.text) S.items.set(page.id, items.filter(x => x !== it)); touchPage(page.id); pushUndo(itemsChange(page.id, textBefore)); }
+  textOrig = null; requestRender();
+}
+
+/* ---------- images ---------- */
+function insertImage(file){
+  const rd = new FileReader();
+  rd.onload = () => {
+    const im = new Image();
+    im.onload = () => {
+      const m = 1400, k = Math.min(1, m / Math.max(im.naturalWidth, im.naturalHeight));
+      const c = document.createElement('canvas'); c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k);
+      const x = c.getContext('2d'); x.drawImage(im, 0, 0, c.width, c.height);
+      const png = file.type === 'image/png' && rd.result.length < 600000;
+      const src = png ? rd.result : c.toDataURL('image/jpeg', 0.82);
+      const page = S.nb.pages[currentPageIndex()];
+      const w = Math.min(460, c.width), hh = w * c.height / c.width;
+      const cy = clamp(toWorld(0, VH / 2).y - layoutY.get(page.id) - hh / 2, 20, page.h - hh - 20);
+      const it = {id: uid(), k: 'i', x: Math.round((PW - w) / 2), y: Math.round(cy), w, h: hh, src};
+      const before = S.items.get(page.id).slice(); S.items.get(page.id).push(it); touchPage(page.id); pushUndo(itemsChange(page.id, before));
+      setTool('lasso'); sel = {pid: page.id, ids: new Set([it.id])}; updateSelBox(); showSelbar(); requestRender();
+      toast('Image added. Drag to move, use the corner handle to resize.');
+    };
+    im.src = rd.result;
+  };
+  rd.readAsDataURL(file);
+}
+
+/* ================= Toolbar ================= */
+function setTool(t){ if (editingText) commitText(); S.tool = t; if (t !== 'lasso') clearSel(); eraseCursor = null; paintTools(); requestRender(); }
+function paintTools(){
+  const el = $('#tools'); const t = S.tool;
+  const tb = (id, icon, label) => `<button class="ib ${t===id?'on':''}" data-tool="${id}" aria-label="${label}" title="${label}">${icon}</button>`;
+  let opts = '';
+  if (t === 'pen' || t === 'text'){
+    opts += INK.map(c => `<button class="sw ${S.pen.color===c?'on':''}" data-pc="${c}" aria-label="Ink colour"><i style="background:${c}"></i></button>`).join('');
+    opts += `<span class="sw ${INK.includes(S.pen.color)?'':'on'}" title="Custom colour"><i style="background:conic-gradient(#e33,#ec3,#3c6,#39e,#a3e,#e33)"></i><input type="color" id="customInk" value="${S.pen.color}" aria-label="Custom ink colour"></span><span class="sep"></span>`;
+  }
+  if (t === 'pen'){
+    opts += [1.4, 2.2, 3.4, 5.5].map(w => `<button class="wd ${S.pen.w===w?'on':''}" data-pw="${w}" aria-label="Pen width ${w}"><i style="height:${Math.max(2, w*1.3)}px"></i></button>`).join('');
+    opts += `<span class="sep"></span><button class="chip ${S.pen.style==='fountain'?'on':''}" data-ps="fountain">Fountain</button><button class="chip ${S.pen.style==='ball'?'on':''}" data-ps="ball">Ballpoint</button>`;
+  } else if (t === 'hl'){
+    opts += HLC.map(c => `<button class="sw ${S.hl.color===c?'on':''}" data-hc="${c}" aria-label="Highlighter colour"><i style="background:${c}"></i></button>`).join('') + '<span class="sep"></span>';
+    opts += [10, 18, 28].map(w => `<button class="wd ${S.hl.w===w?'on':''}" data-hw="${w}" aria-label="Highlighter width ${w}"><i style="height:${w/2.6}px;opacity:.6"></i></button>`).join('');
+  } else if (t === 'eraser'){
+    opts += `<button class="chip ${S.eraser.mode==='stroke'?'on':''}" data-em="stroke">Whole stroke</button><button class="chip ${S.eraser.mode==='partial'?'on':''}" data-em="partial">Precise</button><span class="sep"></span>`;
+    opts += [10, 16, 28].map(w => `<button class="wd ${S.eraser.size===w?'on':''}" data-es="${w}" aria-label="Eraser size ${w}"><i style="width:${w*0.8}px;height:${w*0.8}px;border-radius:50%;background:none;border:1.5px solid currentColor"></i></button>`).join('');
+  } else if (t === 'text'){
+    opts += [[14,'Small'],[18,'Body'],[26,'Heading']].map(([z,l]) => `<button class="chip ${S.text.size===z?'on':''}" data-ts="${z}">${l}</button>`).join('');
+  } else if (t === 'lasso'){
+    opts += `<span class="note" style="white-space:nowrap;padding:0 6px">Circle ink, text or images to move, resize, recolour or delete.</span>`;
+  } else if (t === 'hand'){
+    opts += `<span class="note" style="white-space:nowrap;padding:0 6px">Scroll and zoom with one finger or the mouse.</span>`;
+  }
+  el.innerHTML = tb('pen', I.pen, 'Pen') + tb('hl', I.hl, 'Highlighter') + tb('eraser', I.eraser, 'Eraser') + tb('lasso', I.lasso, 'Lasso') + tb('text', I.text, 'Text') +
+    `<button class="ib" id="imgBtn" aria-label="Insert image" title="Insert image">${I.image}</button>` +
+    `<button class="ib ${S.shapes?'on':''}" id="shapeBtn" aria-label="Shape snapping" title="Hold at end of a stroke to snap to a shape">${I.shape}</button>` +
+    (S.pencilOnly ? '' : tb('hand', I.hand, 'Scroll')) +
+    `<span class="sep"></span>` + opts;
+  el.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+  el.querySelector('#imgBtn').onclick = () => $('#fileImg').click();
+  el.querySelector('#shapeBtn').onclick = () => { S.shapes = !S.shapes; savePrefs(); paintTools(); toast(S.shapes ? 'Shape snapping on: pause at the end of a stroke' : 'Shape snapping off'); };
+  el.querySelectorAll('[data-pc]').forEach(b => b.onclick = () => { S.pen.color = b.dataset.pc; savePrefs(); paintTools(); });
+  const ci = el.querySelector('#customInk'); if (ci) ci.onchange = () => { S.pen.color = ci.value; savePrefs(); paintTools(); };
+  el.querySelectorAll('[data-pw]').forEach(b => b.onclick = () => { S.pen.w = +b.dataset.pw; savePrefs(); paintTools(); });
+  el.querySelectorAll('[data-ps]').forEach(b => b.onclick = () => { S.pen.style = b.dataset.ps; savePrefs(); paintTools(); });
+  el.querySelectorAll('[data-hc]').forEach(b => b.onclick = () => { S.hl.color = b.dataset.hc; savePrefs(); paintTools(); });
+  el.querySelectorAll('[data-hw]').forEach(b => b.onclick = () => { S.hl.w = +b.dataset.hw; savePrefs(); paintTools(); });
+  el.querySelectorAll('[data-em]').forEach(b => b.onclick = () => { S.eraser.mode = b.dataset.em; savePrefs(); paintTools(); });
+  el.querySelectorAll('[data-es]').forEach(b => b.onclick = () => { S.eraser.size = +b.dataset.es; savePrefs(); paintTools(); });
+  el.querySelectorAll('[data-ts]').forEach(b => b.onclick = () => { S.text.size = +b.dataset.ts; savePrefs(); paintTools(); });
+}
+function paintHeader(){
+  $('#nbTitle').textContent = S.nb.title;
+  $('#nbSub').textContent = [S.nb.subject, `${S.nb.pages.length} page${S.nb.pages.length===1?'':'s'}`].filter(Boolean).join(' · ');
+}
+$('#back').innerHTML = I.back; $('#undo').innerHTML = I.undo; $('#redo').innerHTML = I.redo; $('#pagesBtn').innerHTML = I.pages; $('#moreBtn').innerHTML = I.more; $('#sessBtn').innerHTML = I.wave;
+$('#back').onclick = closeNotebook;
+$('#undo').onclick = undo; $('#redo').onclick = redo;
+$('#pagesBtn').onclick = () => togglePages();
+$('#sessBtn').onclick = () => toggleSessions();
+$('#zoomChip').onclick = () => { const pi = currentPageIndex(); fitWidth(); cam.ty = -layoutY.get(S.nb.pages[pi].id) * cam.s + 20; clampCam(); requestRender(); };
+$('#moreBtn').onclick = (e) => {
+  const pi = currentPageIndex(), page = S.nb.pages[pi];
+  showMenu(e.currentTarget, [
+    {head: 'Pages'},
+    {icon: I.plus, label: 'Add page after this one', fn: () => addPage(pi + 1)},
+    {icon: I.paper, label: 'Change paper of this page', fn: () => paperDialog(page)},
+    {icon: I.pdf, label: 'Insert PDF pages', fn: () => { pdfTarget = pi + 1; $('#filePdf').click(); }},
+    {icon: I.image, label: 'Insert image', fn: () => $('#fileImg').click()},
+    '-',
+    {head: 'Notebook'},
+    {icon: I.edit, label: 'Rename or change cover', fn: () => notebookDialog(S.nb)},
+    {icon: I.download, label: 'Export notebook as PDF', fn: () => exportPDF(S.nb)},
+    {icon: I.download, label: 'Export this page as image', fn: () => exportPNG(page, pi)},
+    '-',
+    {head: 'Input'},
+    {icon: I.pencil, label: 'Only Apple Pencil writes', toggle: S.pencilOnly, fn: () => { S.pencilOnly = !S.pencilOnly; savePrefs(); paintTools(); toast(S.pencilOnly ? 'Pencil writes, fingers scroll and zoom' : 'Fingers can write too. Use two fingers to scroll.'); }},
+    {icon: I.shape, label: 'Hold to snap shapes', toggle: S.shapes, fn: () => { S.shapes = !S.shapes; savePrefs(); paintTools(); }},
+  ]);
+};
+document.addEventListener('keydown', e => {
+  if (!S.nb || editingText || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod && e.key.toLowerCase() === 'z'){ e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && e.key.toLowerCase() === 'y'){ e.preventDefault(); redo(); return; }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && sel){ selDelete(); return; }
+  if (mod) return;
+  const map = {p:'pen', h:'hl', e:'eraser', l:'lasso', t:'text'}; if (map[e.key]) setTool(map[e.key]);
+  if (e.key === '=' || e.key === '+'){ zoomAt(VW/2, VH/2, 1.2); requestRender(); }
+  if (e.key === '-'){ zoomAt(VW/2, VH/2, 1/1.2); requestRender(); }
+});
+
+/* ================= Pages ================= */
+function addPage(at, opts){
+  const before = S.nb.pages.map(p => ({...p}));
+  const ref = S.nb.pages[Math.max(0, at - 1)];
+  const p = newPage(S.nb, opts || {template: ref && !ref.bg ? ref.template : S.nb.template, paper: ref ? ref.paper : S.nb.paper});
+  S.nb.pages.splice(at, 0, p); S.items.set(p.id, []); touchPage(p.id);
+  computeLayout(); pushUndo({pages: {before, after: S.nb.pages.map(q => ({...q}))}});
+  cam.ty = -layoutY.get(p.id) * cam.s + 20; clampCam(); paintHeader(); requestRender(); if (pagesOpen) renderPagesPanel();
+  return p;
+}
+function pagesOp(fn){
+  const before = S.nb.pages.map(p => ({...p})); fn();
+  computeLayout(); clampCam(); touchMeta(); pushUndo({pages: {before, after: S.nb.pages.map(q => ({...q}))}});
+  bumpAll(); paintHeader(); requestRender(); if (pagesOpen) renderPagesPanel();
+}
+function paperDialog(page){
+  const st = {template: page.template, paper: page.paper};
+  dialog(`<h3>Paper</h3>${page.bg ? '<p>This page is a PDF page. Paper colour shows only around the slide.</p>' : ''}<label>Template<div class="tpls" id="pTpl"></div></label>
+    <label>Paper colour<select id="pPaper"><option value="white">White</option><option value="cream">Cream</option><option value="slate">Slate (dark)</option></select></label>
+    <label style="flex-direction:row;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:14px;color:var(--fg);font-weight:400"><input type="checkbox" id="pAll"> Apply to every page in this notebook</label>
+    <div class="end"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok>Apply</button></div>`, (d, close) => {
+    const tp = d.querySelector('#pTpl'); const paint = () => { tp.innerHTML = ''; for (const [k, l] of TEMPLATES){ const b = h(`<button class="${k===st.template?'on':''}"></button>`); b.appendChild(tplPreview(k, st.paper, 90)); b.appendChild(document.createTextNode(l)); b.onclick = () => { st.template = k; paint(); }; tp.appendChild(b); } };
+    paint(); const ps = d.querySelector('#pPaper'); ps.value = st.paper; ps.onchange = () => { st.paper = ps.value; paint(); };
+    d.querySelector('[data-x]').onclick = close;
+    d.querySelector('[data-ok]').onclick = () => {
+      const all = d.querySelector('#pAll').checked; close();
+      pagesOp(() => { S.nb.pages = S.nb.pages.map(p => (all || p.id === page.id) ? {...p, template: st.template, paper: st.paper} : p); if (all){ S.nb.template = st.template; S.nb.paper = st.paper; } });
+    };
+  });
+}
+let pagesOpen = false, sessOpen = false;
+function togglePages(force){
+  pagesOpen = force !== undefined ? force : !pagesOpen; if (pagesOpen) sessOpen = false;
+  document.querySelectorAll('.panel').forEach(p => p.remove());
+  $('#pagesBtn').classList.toggle('on', pagesOpen); $('#sessBtn').classList.toggle('on', false);
+  if (pagesOpen) renderPagesPanel();
+}
+function renderPagesPanel(){
+  document.querySelectorAll('.panel').forEach(p => p.remove());
+  const cur = currentPageIndex();
+  const pan = h(`<aside class="panel" aria-label="Pages"><div class="panel-h"><b>Pages</b><button class="chip" id="onlyStar">Bookmarked</button><button class="ib" id="pClose" aria-label="Close">${I.close}</button></div><div class="panel-b"><div class="thumbs"></div><button class="btn" id="pAdd" style="margin-top:16px;width:100%;justify-content:center">${I.plus}Add page at end</button></div></aside>`);
+  const grid = pan.querySelector('.thumbs');
+  const onlyStar = pan._star = renderPagesPanel._star || false;
+  pan.querySelector('#onlyStar').classList.toggle('on', onlyStar);
+  pan.querySelector('#onlyStar').onclick = () => { renderPagesPanel._star = !onlyStar; renderPagesPanel(); };
+  S.nb.pages.forEach((p, i) => {
+    if (onlyStar && !p.star) return;
+    const t = h(`<div class="thumb ${i===cur?'cur':''}"><button class="go" aria-label="Go to page ${i+1}"></button><div class="row"><button class="star ${p.star?'on':''}" aria-label="Bookmark">${p.star ? I.star : I.starO}</button><span>${i+1}</span><span style="display:flex"><button data-a="up" aria-label="Move up">${I.up}</button><button data-a="down" aria-label="Move down">${I.down}</button><button data-a="more" aria-label="Page options">${I.more}</button></span></div></div>`);
+    const c = document.createElement('canvas'); const w = 260, sc = w / PW; c.width = w; c.height = Math.round(p.h * sc);
+    const x = c.getContext('2d'); x.scale(sc, sc); drawPageContent(x, p, S.items.get(p.id));
+    t.querySelector('.go').appendChild(c);
+    t.querySelector('.go').onclick = () => { cam.ty = -layoutY.get(p.id) * cam.s + 20; clampCam(); requestRender(); if (VW < 700) togglePages(false); else renderPagesPanel(); };
+    t.querySelector('.star').onclick = () => { p.star = !p.star; touchMeta(); renderPagesPanel(); };
+    t.querySelector('[data-a=up]').onclick = () => { if (i > 0) pagesOp(() => { const a = S.nb.pages; [a[i-1], a[i]] = [a[i], a[i-1]]; }); };
+    t.querySelector('[data-a=down]').onclick = () => { if (i < S.nb.pages.length - 1) pagesOp(() => { const a = S.nb.pages; [a[i+1], a[i]] = [a[i], a[i+1]]; }); };
+    t.querySelector('[data-a=more]').onclick = (e) => showMenu(e.currentTarget, [
+      {icon: I.plus, label: 'Add page after', fn: () => addPage(i + 1)},
+      {icon: I.copy, label: 'Duplicate page', fn: () => { const np = {...p, id: uid(), star: false}; S.items.set(np.id, S.items.get(p.id).map(it => { const c = cloneItem(it); c.id = uid(); return c; })); touchPage(np.id); pagesOp(() => S.nb.pages.splice(i + 1, 0, np)); }},
+      {icon: I.paper, label: 'Change paper', fn: () => paperDialog(p)},
+      {icon: I.download, label: 'Export page as image', fn: () => exportPNG(p, i)},
+      {icon: I.trash, label: 'Delete page', danger: true, fn: () => { if (S.nb.pages.length === 1){ toast('A notebook needs at least one page'); return; } pagesOp(() => S.nb.pages.splice(i, 1)); toast('Page deleted. Undo brings it back.'); }},
+    ]);
+    grid.appendChild(t);
+  });
+  if (onlyStar && !grid.children.length) grid.innerHTML = '<p class="note" style="grid-column:1/-1">No bookmarked pages yet. Tap the star under a page to bookmark it.</p>';
+  pan.querySelector('#pClose').onclick = () => togglePages(false);
+  pan.querySelector('#pAdd').onclick = () => addPage(S.nb.pages.length);
+  $('#stage').appendChild(pan);
+  const curEl = grid.querySelector('.cur'); if (curEl) curEl.scrollIntoView({block: 'nearest'});
+}
+
+/* ================= PDF import & rendering ================= */
+let pdfTarget = 'new';
+const pdfDocs = new Map(); // key -> Promise<PDFDocumentProxy>
+const pdfImgs = new Map(); // key:n -> canvas
+const pdfPending = new Set();
+let pdfQueue = Promise.resolve();
+function pdfLib(){ const lib = window.pdfjsLib || (window['pdfjs-dist/build/pdf']); if (lib && !lib.GlobalWorkerOptions.workerSrc) lib.GlobalWorkerOptions.workerSrc = 'libs/pdf.worker.min.js'; return lib; }
+async function getPdfBytes(key){
+  const b = await IDB.get('blob', key); if (b) return new Uint8Array(await b.arrayBuffer());
+  const ref = S.nb && S.nb.pdfs[key];
+  if (ref && ref.url){ try { const r = await fetch(ref.url); if (r.ok){ const blob = await r.blob(); await IDB.put('blob', key, blob); return new Uint8Array(await blob.arrayBuffer()); } } catch(e){} }
+  return null;
+}
+function loadPdf(key, bytes){
+  if (!pdfDocs.has(key)) pdfDocs.set(key, (async () => { const data = bytes || await getPdfBytes(key); if (!data) throw new Error('missing'); return pdfLib().getDocument({data, disableWorker: true, isEvalSupported: false}).promise; })());
+  return pdfDocs.get(key);
+}
+function pdfImage(bg){
+  const k = bg.pdf + ':' + bg.n; const c = pdfImgs.get(k);
+  if (c){ pdfImgs.delete(k); pdfImgs.set(k, c); return c; }
+  if (!pdfPending.has(k)){
+    pdfPending.add(k);
+    pdfQueue = pdfQueue.then(async () => {
+      try {
+        const doc = await loadPdf(bg.pdf); const pg = await doc.getPage(bg.n);
+        const vp0 = pg.getViewport({scale: 1}), sc = 1191 / vp0.width, vp = pg.getViewport({scale: sc});
+        const cnv = document.createElement('canvas'); cnv.width = Math.round(vp.width); cnv.height = Math.round(vp.height);
+        await pg.render({canvasContext: cnv.getContext('2d'), viewport: vp}).promise;
+        pdfImgs.set(k, cnv);
+        while (pdfImgs.size > 12){ const o = pdfImgs.keys().next().value; const oc = pdfImgs.get(o); oc.width = oc.height = 0; pdfImgs.delete(o); }
+        if (S.nb) for (const p of S.nb.pages) if (p.bg && p.bg.pdf === bg.pdf && p.bg.n === bg.n) pageVer.set(p.id, (pageVer.get(p.id)||0) + 1);
+        requestRender();
+      } catch(e){ /* stays as placeholder */ }
+      pdfPending.delete(k);
+    });
+  }
+  return null;
+}
+async function ensurePdfImage(bg){ for (let i = 0; i < 400; i++){ const c = pdfImage(bg); if (c) return c; await new Promise(r => setTimeout(r, 50)); } return null; }
+$('#filePdf').onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  if (!pdfLib()){ toast('The PDF reader did not load. Check your connection and try again.'); return; }
+  busy('Reading PDF…');
+  try {
+    const bytes = new Uint8Array(await f.arrayBuffer());
+    const key = 'pdf_' + uid();
+    await IDB.put('blob', key, new Blob([bytes], {type: 'application/pdf'}));
+    const doc = await pdfLib().getDocument({data: bytes.slice(), disableWorker: true, isEvalSupported: false}).promise;
+    pdfDocs.set(key, Promise.resolve(doc));
+    const pages = [];
+    for (let n = 1; n <= doc.numPages; n++){ const pg = await doc.getPage(n); const vp = pg.getViewport({scale: 1}); pages.push({n, h: Math.round(PW * vp.height / vp.width)}); }
+    const name = f.name.replace(/\.pdf$/i, '');
+    if (pdfTarget === 'new' || !S.nb){
+      const nb = newNotebook({title: name, subject: S.subject.startsWith('__') ? '' : S.subject, color: COVERS[S.notebooks.size % COVERS.length], template: 'ruled'});
+      nb.pdfs[key] = {name: f.name};
+      for (const q of pages){ const p = newPage(nb, {h: q.h, bg: {pdf: key, n: q.n}}); nb.pages.push(p); nb.rev[p.id] = 1; await IDB.put('pg', p.id, {id: p.id, nb: nb.id, items: []}); }
+      S.notebooks.set(nb.id, nb); await IDB.put('nb', nb.id, nb);
+      busy(null); Cloud.schedule(nb.id); openNotebook(nb.id);
+      toast(`${pages.length} pages imported. Write right on the slides.`);
+    } else {
+      S.nb.pdfs[key] = {name: f.name};
+      const at = pdfTarget;
+      pagesOp(() => { const add = pages.map(q => { const p = newPage(S.nb, {h: q.h, bg: {pdf: key, n: q.n}}); S.items.set(p.id, []); dirty.add(p.id); S.nb.rev[p.id] = 1; return p; }); S.nb.pages.splice(at, 0, ...add); });
+      busy(null); toast(`${pages.length} PDF pages inserted`);
+    }
+  } catch(err){ busy(null); toast('That PDF could not be opened. It may be password-protected or damaged.'); }
+};
+$('#fileImg').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f && S.nb) insertImage(f); };
+
+/* ================= Recording & audio sync ================= */
+const Rec = {
+  active: null, t0: 0, mr: null, chunks: [], timer: 0,
+  elapsed(){ return performance.now() - this.t0; },
+  async start(){
+    if (Player.open) Player.close();
+    const nb = S.nb; const n = nb.sessions.length + 1;
+    const sess = {id: uid(), name: `Lecture ${n} · ${new Date().toLocaleDateString([], {month:'short', day:'numeric'})}`, created: Date.now(), duration: 0, audioKey: null, offset: 0, kind: 'clock'};
+    let stream = null;
+    try { if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder) stream = await Promise.race([navigator.mediaDevices.getUserMedia({audio: true}), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000))]); } catch(e){ stream = null; }
+    if (stream){
+      sess.kind = 'mic'; this.chunks = [];
+      try { this.mr = new MediaRecorder(stream); } catch(e){ this.mr = null; stream.getTracks().forEach(t => t.stop()); stream = null; sess.kind = 'clock'; }
+      if (this.mr){ this.mr.ondataavailable = ev => ev.data.size && this.chunks.push(ev.data); this.mr.start(1000); }
+    }
+    if (!stream){
+      const go = await new Promise(res => dialog(`<h3>Microphone not available</h3><p>Marginalia couldn’t use the microphone. To allow it, open Settings › Privacy & Security › Microphone, or tap Record again and choose Allow. Meanwhile you can run a lecture clock that stamps everything you write with the time, and attach a recording from another app later.</p><p><b style="color:var(--fg)">1.</b> Start a recording in Voice Memos (or any recorder).<br><b style="color:var(--fg)">2.</b> Come back and tap Start clock at the same moment.<br><b style="color:var(--fg)">3.</b> After class, open Recordings and attach the audio file. Tap any ink while playing to jump to that moment.</p><div class="end"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok>Start clock</button></div>`, (d, close) => { d.querySelector('[data-x]').onclick = () => { close(); res(false); }; d.querySelector('[data-ok]').onclick = () => { close(); res(true); }; }));
+      if (!go) return;
+    }
+    nb.sessions.push(sess); touchMeta();
+    this.active = sess; this.t0 = performance.now();
+    this.timer = setInterval(() => this.paint(), 500); this.paint();
+    toast(sess.kind === 'mic' ? 'Recording. Your notes are synced to the audio.' : 'Lecture clock running. Your notes are time-stamped.');
+  },
+  async stop(){
+    const sess = this.active; if (!sess) return;
+    sess.duration = Math.round(this.elapsed()); this.active = null; clearInterval(this.timer);
+    if (this.mr){
+      const mr = this.mr; this.mr = null;
+      await new Promise(res => { mr.onstop = res; try { mr.stop(); } catch(e){ res(); } });
+      mr.stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(this.chunks, {type: mr.mimeType || 'audio/mp4'}); this.chunks = [];
+      sess.audioKey = 'aud_' + sess.id; await IDB.put('blob', sess.audioKey, blob);
+    }
+    touchMeta(); this.paint(); if (sessOpen) renderSessions();
+    toast(sess.audioKey ? 'Recording saved' : 'Clock stopped. Attach your recording in Recordings.');
+  },
+  paint(){ const b = $('#rec'); b.classList.toggle('live', !!this.active); $('#recLbl').textContent = this.active ? fmtT(this.elapsed()) : 'Record'; },
+};
+$('#rec').onclick = () => Rec.active ? Rec.stop() : Rec.start();
+
+const Player = {
+  open: false, audio: null, sess: null, url: null, raf: 0, replay: true,
+  async play(sess){
+    this.close();
+    const blob = sess.audioKey ? await IDB.get('blob', sess.audioKey) : null;
+    if (!blob){ toast('No audio on this device for this recording. Attach the file first.'); return; }
+    this.sess = sess; this.url = URL.createObjectURL(blob); this.audio = new Audio(this.url); this.open = true;
+    const bar = h(`<div class="player" role="region" aria-label="Playback">
+      <button class="ib" data-a="b15" aria-label="Back 15 seconds">${I.back15}</button>
+      <button class="ib" data-a="pp" aria-label="Play or pause">${I.play}</button>
+      <button class="ib" data-a="f15" aria-label="Forward 15 seconds">${I.fwd15}</button>
+      <input type="range" min="0" max="1000" value="0" id="seek" aria-label="Position">
+      <span class="tm" id="ptm">0:00 / 0:00</span>
+      <button class="chip" data-a="sp">1×</button>
+      <button class="chip ${this.replay?'on':''}" data-a="rp" title="Fade notes written later in the lecture">Ink replay</button>
+      <button class="ib" data-a="x" aria-label="Close player">${I.close}</button>
+      <div class="hint">${esc(sess.name)} · tap any ink from this lecture to jump to when you wrote it.</div></div>`);
+    $('#stage').appendChild(bar);
+    const a = this.audio, seek = bar.querySelector('#seek');
+    bar.querySelector('[data-a=pp]').onclick = () => a.paused ? a.play() : a.pause();
+    bar.querySelector('[data-a=b15]').onclick = () => a.currentTime = Math.max(0, a.currentTime - 15);
+    bar.querySelector('[data-a=f15]').onclick = () => a.currentTime = Math.min(a.duration || 1e9, a.currentTime + 15);
+    const speeds = [1, 1.25, 1.5, 2, 0.75]; let si = 0;
+    bar.querySelector('[data-a=sp]').onclick = (e) => { si = (si + 1) % speeds.length; a.playbackRate = speeds[si]; e.currentTarget.textContent = speeds[si] + '×'; };
+    bar.querySelector('[data-a=rp]').onclick = (e) => { this.replay = !this.replay; e.currentTarget.classList.toggle('on', this.replay); this.tick(true); };
+    bar.querySelector('[data-a=x]').onclick = () => this.close();
+    seek.oninput = () => { if (a.duration) a.currentTime = seek.value / 1000 * a.duration; };
+    a.onplay = a.onpause = () => { bar.querySelector('[data-a=pp]').innerHTML = a.paused ? I.play : I.pause; };
+    a.ontimeupdate = () => this.tick();
+    a.onloadedmetadata = () => this.tick(true);
+    a.play().catch(() => {});
+    this.tick(true);
+  },
+  tick(force){
+    const a = this.audio; if (!a) return;
+    const bar = $('.player'); if (bar){ const sk = bar.querySelector('#seek'); if (a.duration && document.activeElement !== sk) sk.value = a.currentTime / a.duration * 1000; bar.querySelector('#ptm').textContent = `${fmtT(a.currentTime * 1000)} / ${fmtT((a.duration || 0) * 1000)}`; }
+    const nf = this.replay ? {sid: this.sess.id, t: (a.currentTime - (this.sess.offset || 0)) * 1000} : null;
+    if (force || !fade !== !nf || (nf && fade && Math.abs(nf.t - fade.t) > 150)){ fade = nf; bumpSession(); requestRender(); }
+  },
+  jumpTo(w){
+    if (!this.audio) return false;
+    let page, lp;
+    if (w.screen){ const ww = toWorld(w.screen.x, w.screen.y); page = pageAt(ww.y); if (!page) return false; lp = localPt(page, ww); }
+    else { page = pageAt(w.y); if (!page) return false; lp = localPt(page, w); }
+    const r = 14 / cam.s;
+    const hit = [...S.items.get(page.id)].reverse().find(it => it.s === this.sess.id && it.t != null && (it.k === 's' ? strokeHit(it, lp.x, lp.y, r) : (() => { const b = itemBox(it); return lp.x >= b.x0 && lp.x <= b.x1 && lp.y >= b.y0 && lp.y <= b.y1; })()));
+    if (!hit) return false;
+    this.audio.currentTime = Math.max(0, hit.t / 1000 + (this.sess.offset || 0) - 2); this.audio.play().catch(() => {});
+    toast('Jumped to ' + fmtT(hit.t), 1000); return true;
+  },
+  close(){ if (this.audio){ this.audio.pause(); URL.revokeObjectURL(this.url); } this.audio = null; this.sess = null; this.open = false; const b = $('.player'); if (b) b.remove(); if (fade){ fade = null; bumpSession(); requestRender(); } },
+};
+function bumpSession(){ if (!S.nb) return; for (const p of S.nb.pages){ const its = S.items.get(p.id); if (its && its.some(it => it.s)) pageVer.set(p.id, (pageVer.get(p.id)||0) + 1); } }
+let attachFor = null;
+$('#fileAudio').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f || !attachFor) return;
+  const sess = attachFor; attachFor = null;
+  sess.audioKey = 'aud_' + sess.id; await IDB.put('blob', sess.audioKey, f); touchMeta();
+  if (sessOpen) renderSessions(); toast('Recording attached. Press play to hear it with your notes.');
+};
+function toggleSessions(force){
+  sessOpen = force !== undefined ? force : !sessOpen; if (sessOpen) pagesOpen = false;
+  document.querySelectorAll('.panel').forEach(p => p.remove());
+  $('#sessBtn').classList.toggle('on', sessOpen); $('#pagesBtn').classList.toggle('on', false);
+  if (sessOpen) renderSessions();
+}
+function renderSessions(){
+  document.querySelectorAll('.panel').forEach(p => p.remove());
+  const nb = S.nb;
+  const pan = h(`<aside class="panel" aria-label="Recordings"><div class="panel-h"><b>Recordings</b><button class="ib" id="sClose" aria-label="Close">${I.close}</button></div><div class="panel-b"></div></aside>`);
+  const body = pan.querySelector('.panel-b');
+  if (!nb.sessions.length) body.innerHTML = `<p class="note">Tap <b>Record</b> at the start of a lecture. Everything you write is stamped with the time, so later you can tap a line of notes and hear what the lecturer was saying.</p>`;
+  [...nb.sessions].reverse().forEach(s => {
+    const n = [...S.items.values()].reduce((a, its) => a + its.filter(it => it.s === s.id).length, 0);
+    const card = h(`<div class="sess"><b>${esc(s.name)}</b><span class="s">${fmtT(s.duration)} · ${n} note${n===1?'':'s'} linked · ${s.audioKey ? 'audio on this device' : 'no audio attached'}${s.offset ? ` · offset ${s.offset > 0 ? '+' : ''}${s.offset}s` : ''}</span><div class="acts"></div></div>`);
+    const acts = card.querySelector('.acts');
+    const mk = (l, fn, cls='') => { const b = h(`<button class="btn ${cls}">${l}</button>`); b.onclick = fn; acts.appendChild(b); };
+    if (s.audioKey) mk('Play', () => Player.play(s), 'primary');
+    mk(s.audioKey ? 'Replace audio' : 'Attach recording', () => { attachFor = s; $('#fileAudio').click(); }, s.audioKey ? '' : 'primary');
+    mk('Rename', () => dialog(`<h3>Rename recording</h3><label>Name<input type="text" id="rn" value="${esc(s.name)}"></label><label>Audio offset (seconds)<input type="text" id="ro" inputmode="decimal" value="${s.offset || 0}"></label><p>If the audio started before you tapped Record, enter how many seconds earlier, for example 4.</p><div class="end"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok>Save</button></div>`, (d, close) => { d.querySelector('[data-x]').onclick = close; d.querySelector('[data-ok]').onclick = () => { s.name = d.querySelector('#rn').value.trim() || s.name; const o = parseFloat(d.querySelector('#ro').value); s.offset = isFinite(o) ? o : 0; close(); touchMeta(); renderSessions(); }; }));
+    mk('Delete', () => confirmDlg('Delete this recording?', 'Your notes stay. They just won’t link to audio any more.', 'Delete', () => { if (Player.sess === s) Player.close(); nb.sessions = nb.sessions.filter(x => x !== s); if (s.audioKey) IDB.del('blob', s.audioKey); touchMeta(); renderSessions(); }), 'danger');
+    body.appendChild(card);
+  });
+  body.appendChild(h(`<p class="note" style="margin-top:8px">Recordings are saved with the notebook on this iPad and included in backups.</p>`));
+  pan.querySelector('#sClose').onclick = () => toggleSessions(false);
+  $('#stage').appendChild(pan);
+}
+
+/* ================= Export ================= */
+async function renderPageCanvas(nb, page, items, scale=2){
+  if (page.bg) await ensurePdfImage(page.bg);
+  const c = document.createElement('canvas'); c.width = PW * scale; c.height = page.h * scale;
+  const x = c.getContext('2d'); x.scale(scale, scale); drawPageContent(x, page, items); return c;
+}
+async function exportPDF(nb){
+  if (!window.jspdf){ toast('The PDF tool did not load. Check your connection and try again.'); return; }
+  const wasOpen = S.nb === nb;
+  busy('Preparing PDF…');
+  try {
+    const prevNb = S.nb; if (!wasOpen) S.nb = nb; // pdf lookup uses S.nb.pdfs
+    const doc = new window.jspdf.jsPDF({unit: 'px', orientation: nb.pages[0].h >= PW ? 'p' : 'l', format: [PW, nb.pages[0].h], hotfixes: ['px_scaling'], compress: true});
+    for (let i = 0; i < nb.pages.length; i++){
+      const p = nb.pages[i]; busy(`Preparing PDF… page ${i+1} of ${nb.pages.length}`);
+      let items = wasOpen ? S.items.get(p.id) : ((await IDB.get('pg', p.id)) || {items: []}).items;
+      const savedFade = fade; fade = null;
+      const c = await renderPageCanvas(nb, p, items, 2);
+      fade = savedFade;
+      if (i) doc.addPage([PW, p.h], p.h >= PW ? 'p' : 'l');
+      doc.addImage(c.toDataURL('image/jpeg', 0.88), 'JPEG', 0, 0, PW, p.h);
+      c.width = c.height = 0;
+    }
+    if (!wasOpen) S.nb = prevNb;
+    const blob = doc.output('blob'); busy(null);
+    await saveFile(blob, (nb.title.replace(/[\\/:*?"<>|]+/g, '').trim() || 'Notebook') + '.pdf');
+  } catch(e){ busy(null); toast('Export didn’t finish. Try again.'); }
+}
+async function exportPNG(page, i){
+  busy('Preparing image…');
+  try { const c = await renderPageCanvas(S.nb, page, S.items.get(page.id), 2); const blob = await new Promise(r => c.toBlob(r, 'image/png')); busy(null); await saveFile(blob, `${S.nb.title} p${i+1}.png`); }
+  catch(e){ busy(null); toast('Export didn’t finish. Try again.'); }
+}
+
+/* ================= Open / close ================= */
+async function openNotebook(id, pageIndex){
+  const nb = S.notebooks.get(id); if (!nb) return;
+  busy('Opening…');
+  S.items = new Map();
+  for (const p of nb.pages){ const rec = await IDB.get('pg', p.id); S.items.set(p.id, rec ? rec.items : []); }
+  busy(null);
+  S.nb = nb; undoStack = []; redoStack = []; caches.clear(); pdfImgs.clear(); pdfDocs.clear(); pageVer.clear(); clearSel(); fade = null;
+  $('#library').hidden = true; $('#editor').hidden = false;
+  readColors(); computeLayout(); paintHeader(); paintTools(); paintUndo(); Rec.paint();
+  resize(); fitWidth();
+  const pi = clamp(pageIndex != null ? pageIndex : (nb.lastPage || 0), 0, nb.pages.length - 1);
+  cam.ty = -layoutY.get(nb.pages[pi].id) * cam.s + 20; clampCam(); requestRender();
+  if (!S.pencilOnly && matchMedia('(pointer:coarse)').matches && !sessionStorageGet('hinted')){ sessionStorageSet('hinted', 1); setTimeout(() => toast('Write with Apple Pencil. Pinch with two fingers to zoom, two-finger tap to undo.', 4200), 400); }
+}
+function sessionStorageGet(k){ try { return sessionStorage.getItem('m.' + k); } catch(e){ return null; } }
+function sessionStorageSet(k, v){ try { sessionStorage.setItem('m.' + k, v); } catch(e){} }
+async function closeNotebook(){
+  if (editingText) commitText();
+  if (Rec.active) await Rec.stop();
+  Player.close();
+  togglePages(false); toggleSessions(false); clearSel();
+  S.nb.lastPage = currentPageIndex();
+  await flushSave();
+  S.nb = null; S.items = new Map(); caches.clear(); pdfImgs.clear();
+  $('#editor').hidden = true; $('#library').hidden = false; renderLibrary();
+}
+window.addEventListener('resize', () => { if (S.nb){ resize(); if (editingText) placeTextEditor(); } });
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { readColors(); requestRender(); });
+new MutationObserver(() => { readColors(); requestRender(); }).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+document.addEventListener('visibilitychange', () => { if (document.hidden && S.nb) flushSave(); });
+window.addEventListener('pagehide', () => { if (S.nb) flushSave(); });
+
+/* ================= Local storage status & backups ================= */
+const Cloud = {
+  state: 'ok', msg: 'Saved on this iPad',
+  schedule(){},
+  paintStatus(){ const el = $('#syncLbl'); if (!el) return; el.className = 'sync ' + this.state; el.textContent = this.msg; },
+  async init(){
+    try { if (navigator.storage && navigator.storage.persist){ const p = (await navigator.storage.persisted()) || (await navigator.storage.persist()); if (!p && !isStandalone()){ this.state = 'warn'; this.msg = 'Install to keep notes safe'; } } } catch(e){}
+    this.paintStatus();
+  },
+};
+const b64 = blob => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+async function backupAll(){
+  busy('Packing your notebooks…');
+  try {
+    const nbs = [...S.notebooks.values()].filter(n => !n.deleted), pages = {}, blobs = {};
+    for (const nb of nbs){
+      for (const p of nb.pages){ const r = await IDB.get('pg', p.id); pages[p.id] = r ? r.items : []; }
+      for (const k of Object.keys(nb.pdfs || {})){ const bl = await IDB.get('blob', k); if (bl) blobs[k] = await b64(bl); }
+      for (const se of nb.sessions){ if (se.audioKey){ const bl = await IDB.get('blob', se.audioKey); if (bl) blobs[se.audioKey] = await b64(bl); } }
+    }
+    const data = JSON.stringify({app: 'marginalia', version: 1, exported: Date.now(), notebooks: nbs, pages, blobs});
+    busy(null);
+    await saveFile(new Blob([data], {type: 'application/json'}), `Marginalia backup ${new Date().toISOString().slice(0,10)}.json`);
+  } catch(e){ busy(null); toast('Backup didn’t finish. Try again.'); }
+}
+async function restoreBackup(file){
+  busy('Restoring…');
+  try {
+    const d = JSON.parse(await file.text());
+    if (d.app !== 'marginalia') throw new Error('not a backup');
+    let n = 0;
+    for (const nb of d.notebooks){
+      const cur = S.notebooks.get(nb.id);
+      if (cur && !cur.deleted && cur.updatedAt >= nb.updatedAt) continue;
+      for (const p of nb.pages) await IDB.put('pg', p.id, {id: p.id, nb: nb.id, items: d.pages[p.id] || []});
+      for (const k of [...Object.keys(nb.pdfs || {}), ...nb.sessions.map(x => x.audioKey).filter(Boolean)]) if (d.blobs[k]) await IDB.put('blob', k, await (await fetch(d.blobs[k])).blob());
+      S.notebooks.set(nb.id, nb); await IDB.put('nb', nb.id, nb); n++;
+    }
+    busy(null); renderLibrary(); toast(n ? `Restored ${n} notebook${n===1?'':'s'}` : 'Everything in that backup is already here');
+  } catch(e){ busy(null); toast('That file isn’t a Marginalia backup.'); }
+}
+$('#fileBackup').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) restoreBackup(f); };
+async function saveFile(blob, filename){
+  const file = new File([blob], filename, {type: blob.type});
+  if (navigator.canShare && navigator.canShare({files: [file]})){
+    try { await navigator.share({files: [file], title: filename}); return true; } catch(e){ if (e && e.name === 'AbortError') return false; }
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); return true;
+}
+const isStandalone = () => window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+
+/* ================= Welcome notebook ================= */
+async function seedWelcome(){
+  const nb = Object.assign(newNotebook({id: uid(), title: 'Start here', subject: 'Getting started', color: COVERS[0], template: 'ruled'}), {seed: true});
+  const p1 = newPage(nb), p2 = newPage(nb, {template: 'cornell'});
+  nb.pages.push(p1, p2); nb.rev[p1.id] = 1; nb.rev[p2.id] = 1;
+  const T = (x, y, text, size=18, b=0, c=INK[0], w=620) => ({id: uid(), k: 't', x, y, w, size, b, c, text});
+  const wave = (x, y, len, c, w, tool='pen') => { const p = []; for (let i = 0; i <= len; i += 6) p.push(x + i, y + Math.sin(i / 14) * 1.6, .55); return {id: uid(), k: 's', tool, c, w, p, u: tool === 'hl' ? 1 : undefined}; };
+  const circle = (cx, cy, r, c) => { const p = []; for (let i = 0; i <= 64; i++){ const t = i / 64 * 6.4 - .2; p.push(cx + r * Math.cos(t) * 1.15, cy + r * Math.sin(t) * .9, .5 + .2 * Math.sin(t * 2)); } return {id: uid(), k: 's', tool: 'pen', c, w: 2.2, p}; };
+  const items1 = [
+    T(100, 112, 'Welcome to Marginalia', 26, 1, INK[1]),
+    wave(100, 152, 300, '#FFE14D', 18, 'hl'),
+    T(100, 176, 'Everything is saved on this iPad and works offline. Use Backup in the library to keep a copy in Files or iCloud Drive.', 18, 0, INK[0], 600),
+    T(100, 272, 'Writing', 18, 1, INK[0]),
+    T(100, 304, '• Apple Pencil writes; fingers scroll. Pinch with two fingers to zoom.\n• Two-finger tap = undo. Three-finger tap = redo.\n• Pause at the end of a stroke to snap it into a clean line, circle or box.\n• The Fountain pen responds to pressure. Ballpoint stays even.', 18, 0, INK[0], 610),
+    T(100, 464, 'Studying', 18, 1, INK[0]),
+    T(100, 496, '• Import PDF to write straight onto lecture slides.\n• Tap Record when class starts. Every line you write is stamped with the time. Later, play it back and tap your ink to hear that moment.\n• Use the Cornell page (next page) for cue-question review.\n• Star pages in the Pages panel to bookmark them for revision.', 18, 0, INK[0], 610),
+    T(100, 720, 'Editing', 18, 1, INK[0]),
+    T(100, 752, '• Lasso: circle anything to move, resize, recolour or delete it.\n• Text tool: tap anywhere to type. Typed notes are searchable from the library.', 18, 0, INK[0], 610),
+    circle(176, 284, 34, INK[2]),
+    T(100, 950, 'Try it: write below this line ↓', 14, 0, '#5C6773', 400),
+  ];
+  const items2 = [
+    T(16, 50, 'Cornell notes', 26, 1, INK[1], 500),
+    T(16, 140, 'What is it for?', 14, 0, INK[2], 200),
+    T(246, 140, 'Notes column: write during the lecture.', 18, 0, INK[0], 520),
+    T(16, 236, 'Cue column', 14, 0, INK[2], 200),
+    T(246, 236, 'After class, write questions in the cue column. Cover the notes and answer them to revise.', 18, 0, INK[0], 520),
+    T(16, PH - 190, 'Summary: two or three sentences in your own words.', 18, 0, INK[0], 740),
+  ];
+  S.notebooks.set(nb.id, nb);
+  await IDB.put('pg', p1.id, {id: p1.id, nb: nb.id, items: items1});
+  await IDB.put('pg', p2.id, {id: p2.id, nb: nb.id, items: items2});
+  await IDB.put('nb', nb.id, nb);
+}
+
+/* ================= Boot ================= */
+(async function boot(){
+  const all = (await IDB.all('nb')) || [];
+  for (const nb of all){ nb.pushed = nb.pushed || {}; nb.rev = nb.rev || {}; nb.sessions = nb.sessions || []; nb.pdfs = nb.pdfs || {}; S.notebooks.set(nb.id, nb); }
+  if (!all.length){ await seedWelcome(); }
+  if (!(await IDB.ok())) { Cloud.state = 'warn'; Cloud.msg = 'Storage blocked · notes won’t be kept'; }
+  renderLibrary();
+  Cloud.init();
+  try { if (!isStandalone() && /iPad|iPhone|Macintosh/.test(navigator.userAgent) && 'ontouchend' in document && localStorage.getItem('m.installX') !== '1') $('#install').hidden = false; } catch(e){}
+  $('#installX').onclick = () => { $('#install').hidden = true; try { localStorage.setItem('m.installX', '1'); } catch(e){} };
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
